@@ -57,14 +57,14 @@ except Exception as e:
     st.stop()
 
 def upload_ke_supabase(file_bytes, file_path, content_type):
-    bucket_name = "absensi-files"
+    foto_pegawai = "absensi-files"
     try:
-        supabase.storage.from_(bucket_name).upload(
+        supabase.storage.from_(foto_pegawai).upload(
             path=file_path,
             file=file_bytes,
             file_options={"content-type": content_type, "upsert": "true"}
         )
-        return supabase.storage.from_(bucket_name).get_public_url(file_path)
+        return supabase.storage.from_(foto_pegawai).get_public_url(file_path)
     except Exception as e:
         st.error(f"Gagal upload ke server Storage: {e}")
         return None
