@@ -128,7 +128,6 @@ def get_data_sekolah():
 
 def get_data_pegawai():
     try:
-        # OPTIMASI: Tidak memanggil kolom photo_base64 secara massal!
         res = supabase.table('pegawai').select('nip, name, school_name, photo_uploaded, is_cadar').execute()
         if res.data:
             df = pd.DataFrame(res.data)
@@ -157,7 +156,7 @@ def get_data_pengaturan():
         return pd.DataFrame([{'batas_masuk': '07:30', 'batas_pulang': '16:00'}])
 
 # --- 5. INISIALISASI SESSION STATE ---
-for key_state, val in {'role': None, 'admin_sekolah': "Semua Sekolah", 'logout_triggered': False, 'wajah_terverifikasi': False}.items():
+for key_state, val in {'role': None, 'admin_sekolah': "Semua Sekolah", 'logout_triggered': False, 'wajah_terverifikasi': False, 'pending_pc_name': None, 'last_searched_nip_foto': None, 'last_checked_nip_dash': None}.items():
     if key_state not in st.session_state: st.session_state[key_state] = val
 
 if 'schools' not in st.session_state: st.session_state.schools = get_data_sekolah()
@@ -270,7 +269,6 @@ if st.session_state.role == "Pegawai":
     
     if nip_input.strip():
         try:
-            # OPTIMASI: Panggil data foto HANYA saat NIP ini login
             res_pegawai = supabase.table('pegawai').select('nip, name, school_name, photo_uploaded, photo_base64, is_cadar').eq('nip', str(nip_input.strip())).execute()
             df_kandidat = pd.DataFrame(res_pegawai.data) if res_pegawai.data else pd.DataFrame()
         except: df_kandidat = pd.DataFrame()
@@ -424,161 +422,286 @@ if st.session_state.role == "Pegawai":
             else: st.warning("Menunggu akses GPS...")
 
 # ==========================================
-# HAK AKSES 2: ADMIN
+# HAK AKSES 2: ADMIN SEKOLAH (3 MENU UTAMA)
 # ==========================================
 elif st.session_state.role == "Admin":
     col_judul, col_tombol = st.columns([3, 1])
-    col_judul.title("🔐 Dashboard Admin")
+    col_judul.title("🔐 Dashboard Admin Sekolah")
     col_tombol.button("🚪 Logout", on_click=logout, use_container_width=True, key="btn_logout_top_admin")
     admin_akses = st.session_state.get('admin_sekolah', 'Semua Sekolah')
 
-    # --- 1. KELOLA PC ABSENSI ---
-    st.markdown("### 🖥️ 1. Kelola PC Absensi Sekolah")
-    with st.expander("📌 Pendaftaran & Daftar PC", expanded=True):
+    # CSS Khusus untuk menyembunyikan tombol trigger konfirmasi SweetAlert2
+    st.markdown("""
+        <style>
+        div.stButton > button:has(p:contains("CONFIRM_SAVE_PC_YES")), 
+        div.stButton > button:has(p:contains("CONFIRM_SAVE_PC_NO")) {
+            display: none !important;
+        }
+        </style>
+    """, unsafe_allow_html=True)
+
+    # Handler Tombol Konfirmasi Tersembunyi (SweetAlert2 Callback)
+    if st.button("CONFIRM_SAVE_PC_YES", key="btn_confirm_pc_yes_trigger"):
+        if st.session_state.pending_pc_name:
+            new_token = str(uuid.uuid4())
+            cookie_manager.set("school_device_token", new_token, key="set_pc_cookie_swal_confirm")
+            supabase.table('perangkat_sekolah').insert({
+                'school_name': admin_akses, 
+                'device_id': new_token, 
+                'device_name': st.session_state.pending_pc_name
+            }).execute()
+            st.session_state.pending_pc_name = None
+            st.success("✅ PC berhasil didaftarkan!")
+            time.sleep(1)
+            st.rerun()
+
+    if st.button("CONFIRM_SAVE_PC_NO", key="btn_confirm_pc_no_trigger"):
+        st.session_state.pending_pc_name = None
+        st.warning("Pendaftaran PC dibatalkan.")
+        time.sleep(1)
+        st.rerun()
+
+    # Navigasi HANYA 3 MENU UTAMA
+    tab_pc, tab_foto, tab_dashboard = st.tabs([
+        "💻 1. Pendaftaran PC Sekolah", 
+        "📸 2. Upload Foto Pegawai", 
+        "📊 3. Dashboard Cek Absensi"
+    ])
+
+    # ------------------------------------------
+    # MENU 1: PENDAFTARAN PC SEKOLAH (MAX 3 PC)
+    # ------------------------------------------
+    with tab_pc:
+        st.markdown("### 💻 Pendaftaran PC Sekolah (Maksimal 3 PC)")
+        
         try:
             res_pc = supabase.table('perangkat_sekolah').select('id, device_name').eq('school_name', admin_akses).execute()
             list_pc = res_pc.data if res_pc.data else []
         except: list_pc = []
 
         total_terdaftar = len(list_pc)
-        st.markdown("##### ➕ Daftarkan PC Ini")
-        st.caption(f"Status Kuota Perangkat: **{total_terdaftar} dari 2 PC Terdaftar**")
+        st.info(f"Status Kuota Perangkat: **{total_terdaftar} dari 3 PC Terdaftar**")
 
         if total_terdaftar >= 3:
-            st.warning("🔒 **PENDAFTARAN TERKUNCI!** Hubungi Superadmin.")
+            st.error("🔒 **PENDAFTARAN TERKUNCI!** Sekolah Anda sudah mendaftarkan batas maksimal (3 PC).")
         else:
-            nama_pc_input = st.text_input("Nama/Label PC", key="inp_nama_pc_baru")
-            if st.button("📌🛠️ Daftarkan PC Ini", key="btn_register_pc_dynamic"):
-                if admin_akses == "Semua Sekolah": st.error("Login spesifik sebagai admin sekolah diperlukan.")
-                elif nama_pc_input.strip():
-                    new_token = str(uuid.uuid4())
-                    cookie_manager.set("school_device_token", new_token, key="set_pc_cookie_dyn")
-                    supabase.table('perangkat_sekolah').insert({'school_name': admin_akses, 'device_id': new_token, 'device_name': nama_pc_input.strip()}).execute()
-                    st.success("✅ PC berhasil didaftarkan!")
-                    time.sleep(1)
-                    st.rerun()
-                else: st.error("Masukkan label PC.")
-
-        st.markdown("##### 📋 Daftar PC Terdaftar")
-        if list_pc:
-            for r_pc in list_pc: st.write(f"🖥️ **{r_pc['device_name']}** - 🔒 Terkunci")
-        else: st.info("Belum ada PC terdaftar.")
-    
-    # --- 2. KELOLA FOTO ACUAN ---
-    st.markdown("### 📸 2. Kelola Foto Acuan")
-    col_f1, col_f2 = st.columns(2)
-    opsi_sekolah_foto = ["Semua Sekolah"] + st.session_state.schools['school_name'].tolist()
-    sekolah_pilihan_foto = col_f1.selectbox("🏢 Filter Sekolah:", opsi_sekolah_foto if admin_akses == "Semua Sekolah" else [admin_akses], disabled=(admin_akses != "Semua Sekolah"))
-    search_query_foto = col_f2.text_input("🔍 Cari NIP atau Nama:", key="search_admin_foto")
-    
-    if search_query_foto.strip():
-        try:
-            # OPTIMASI: Panggil photo_base64 hanya saat spesifik mencari!
-            query = supabase.table('pegawai').select('nip, name, school_name, photo_uploaded, photo_base64, is_cadar')
-            if sekolah_pilihan_foto != "Semua Sekolah": query = query.eq('school_name', sekolah_pilihan_foto)
-            res_search = query.or_(f"nip.ilike.%{search_query_foto}%,name.ilike.%{search_query_foto}%").execute()
-            df_kandidat = pd.DataFrame(res_search.data) if res_search.data else pd.DataFrame()
-        except: df_kandidat = pd.DataFrame()
-            
-        if not df_kandidat.empty:
-            for index, emp in df_kandidat.iterrows():
-                nip, nama, is_cadar, is_uploaded = str(emp['nip']), emp['name'], str(emp.get('is_cadar', 'False')).lower() == 'true', str(emp.get('photo_uploaded', False)).lower() == 'true'
-                status_simbol = "🧕" if is_cadar else ("🟢" if is_uploaded else "🔴")
-                with st.expander(f"{status_simbol} {nama} — NIP: {nip}"):
-                    col_kiri, col_kanan = st.columns([1, 2])
-                    if is_uploaded and pd.notna(emp.get('photo_base64')) and emp['photo_base64']: col_kiri.image(emp['photo_base64'], use_container_width=True)
-                    else: col_kiri.info("📷 Belum ada foto")
-                            
-                    col_kanan.markdown(f"**Unit:** {emp['school_name']}")
-                    if is_uploaded: col_kanan.error("🔒 Foto terkunci.")
+            with st.form("form_daftar_pc"):
+                nama_pc_input = st.text_input("Masukkan Label / Nama PC Baru:", placeholder="Contoh: PC LAB 01", key="inp_nama_pc_baru_menu")
+                submit_pc = st.form_submit_button("📌 Daftarkan PC Ini")
+                
+                if submit_pc:
+                    if admin_akses == "Semua Sekolah":
+                        st.error("Login spesifik sebagai admin sekolah diperlukan!")
+                    elif not nama_pc_input.strip():
+                        st.error("Nama/Label PC wajib diisi!")
                     else:
-                        foto = col_kanan.file_uploader("Upload Foto", type=['jpg', 'jpeg', 'png'], key=f"foto_up_{nip}")
-                        if foto and col_kanan.button("💾 Simpan", key=f"btn_save_foto_{nip}", use_container_width=True):
-                            file_bytes = kompres_foto(foto.getvalue(), quality=60, max_size=(600, 600))
-                            url_foto = upload_ke_supabase(file_bytes, f"foto_acuan/{nip}.jpg", "image/jpeg")
+                        # Peringatan SweetAlert2 dipicu ketika mendaftarkan PC ke-2 atau seterusnya (total_terdaftar >= 1)
+                        if total_terdaftar >= 1:
+                            st.session_state.pending_pc_name = nama_pc_input.strip()
+                            st.rerun()
+                        else:
+                            # Pendaftaran PC ke-1 langsung diproses
+                            new_token = str(uuid.uuid4())
+                            cookie_manager.set("school_device_token", new_token, key="set_pc_cookie_1st")
+                            supabase.table('perangkat_sekolah').insert({
+                                'school_name': admin_akses, 
+                                'device_id': new_token, 
+                                'device_name': nama_pc_input.strip()
+                            }).execute()
+                            st.success("✅ PC ke-1 berhasil didaftarkan!")
+                            time.sleep(1)
+                            st.rerun()
+
+        # Eksekusi SweetAlert2 Popup Peringatan untuk PC ke-2 atau lebih
+        if st.session_state.pending_pc_name:
+            html_swal_pc = """
+            <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
+            <script>
+                setTimeout(() => {
+                    Swal.fire({
+                        title: 'Peringatan Pendaftaran PC!',
+                        text: 'MAX HANYA 3 PC PASTIKAN SUDAH MELAPORKAN KE ADMIN CABDIS (MOCHD GHAZALI/JEDDAH/GAZA) SEBELUM MENADFTARKAN PC',
+                        icon: 'warning',
+                        showCancelButton: true,
+                        confirmButtonText: 'Oke',
+                        cancelButtonText: 'Batal',
+                        allowOutsideClick: false,
+                        confirmButtonColor: '#2563EB',
+                        cancelButtonColor: '#d33'
+                    }).then((result) => {
+                        if (result.isConfirmed) {
+                            window.parent.document.querySelectorAll('p').forEach(p => {
+                                if(p.innerText === "CONFIRM_SAVE_PC_YES") p.closest('button').click();
+                            });
+                        } else {
+                            window.parent.document.querySelectorAll('p').forEach(p => {
+                                if(p.innerText === "CONFIRM_SAVE_PC_NO") p.closest('button').click();
+                            });
+                        }
+                    });
+                }, 100);
+            </script>
+            """
+            components.html(html_swal_pc, height=0)
+
+        st.markdown("---")
+        st.markdown("##### 📋 Daftar PC Resmi Terdaftar")
+        if list_pc:
+            for idx_p, r_pc in enumerate(list_pc, 1):
+                st.write(f"{idx_p}. 🖥️ **{r_pc['device_name']}** — 🔒 Terkunci Permanen")
+        else:
+            st.info("Belum ada PC terdaftar untuk sekolah ini.")
+
+    # ------------------------------------------
+    # MENU 2: UPLOAD FOTO PEGAWAI (KETIK NIP)
+    # ------------------------------------------
+    with tab_foto:
+        st.markdown("### 📸 Upload Foto Pegawai")
+        st.caption("Ketik NIP Pegawai secara spesifik untuk memuat data (Mencegah beban muat seluruh data).")
+        
+        with st.form("form_cari_nip_foto"):
+            nip_input_foto = st.text_input("Masukkan NIP Pegawai:", placeholder="Contoh: 198001012005011001", key="input_nip_foto_admin")
+            btn_cari_nip = st.form_submit_button("🔍 Cari Data Pegawai")
+            
+        if btn_cari_nip:
+            searched_nip = nip_input_foto.strip()
+            if searched_nip:
+                st.session_state.last_searched_nip_foto = searched_nip
+            else:
+                st.session_state.last_searched_nip_foto = None
+                st.warning("Silahkan masukkan NIP terlebih dahulu.")
+
+        # Memuat pegawai berdasarkan NIP spesifik
+        if st.session_state.last_searched_nip_foto:
+            snip = st.session_state.last_searched_nip_foto
+            try:
+                query_peg = supabase.table('pegawai').select('nip, name, school_name, photo_uploaded, photo_base64, is_cadar').eq('nip', str(snip))
+                if admin_akses != "Semua Sekolah":
+                    query_peg = query_peg.eq('school_name', admin_akses)
+                res_peg = query_peg.execute()
+                df_peg_found = pd.DataFrame(res_peg.data) if res_peg.data else pd.DataFrame()
+            except:
+                df_peg_found = pd.DataFrame()
+
+            if df_peg_found.empty:
+                # SweetAlert2 Popup untuk NIP Tidak Ditemukan
+                html_swal_nip = """
+                <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
+                <script>
+                    setTimeout(() => {
+                        Swal.fire({
+                            title: 'Peringatan!',
+                            text: 'DATA ASN TIDAK DITEMUKAN SILAHKAN MELAPORKAN KE ADMIN CABDIS (MOCHD GHAZALI/JEDDAH/GAZA)',
+                            icon: 'warning',
+                            confirmButtonText: 'Oke',
+                            confirmButtonColor: '#2563EB',
+                            allowOutsideClick: false
+                        });
+                    }, 100);
+                </script>
+                """
+                components.html(html_swal_nip, height=0)
+                st.error("⚠️ DATA ASN TIDAK DITEMUKAN SILAHKAN MELAPORKAN KE ADMIN CABDIS (MOCHD GHAZALI/JEDDAH/GAZA)")
+            else:
+                emp = df_peg_found.iloc[0]
+                nip_peg, nama_peg = str(emp['nip']), emp['name']
+                is_cadar = str(emp.get('is_cadar', 'False')).lower() == 'true'
+                is_uploaded = str(emp.get('photo_uploaded', False)).lower() == 'true'
+                
+                status_str = "🧕 Cadar (Audit)" if is_cadar else ("🟢 Foto Terunggah" if is_uploaded else "🔴 Belum Ada Foto")
+                st.success(f"✅ Data Ditemukan: **{nama_peg}** ({status_str})")
+                
+                col_f_kiri, col_f_kanan = st.columns([1, 2])
+                with col_f_kiri:
+                    if is_uploaded and pd.notna(emp.get('photo_base64')) and emp['photo_base64']:
+                        st.image(emp['photo_base64'], caption=f"Foto {nama_peg}", use_container_width=True)
+                    else:
+                        st.info("📷 Belum ada foto acuan.")
+                        
+                with col_f_kanan:
+                    st.write(f"**Nama:** {nama_peg}")
+                    st.write(f"**NIP:** {nip_peg}")
+                    st.write(f"**Sekolah:** {emp['school_name']}")
+                    
+                    if is_uploaded:
+                        st.warning("🔒 Foto acuan sudah tersimpan dan terkunci.")
+                    else:
+                        foto_file = st.file_uploader("Pilih Foto Acuan Pegawai (JPG/PNG):", type=['jpg', 'jpeg', 'png'], key=f"up_foto_file_{nip_peg}")
+                        if foto_file and st.button("💾 Simpan Foto Acuan", key=f"btn_save_foto_{nip_peg}", use_container_width=True):
+                            file_bytes = kompres_foto(foto_file.getvalue(), quality=60, max_size=(600, 600))
+                            url_foto = upload_ke_supabase(file_bytes, f"foto_acuan/{nip_peg}.jpg", "image/jpeg")
                             if url_foto:
-                                supabase.table('pegawai').update({'photo_uploaded': True, 'photo_base64': url_foto}).eq('nip', nip).execute()
+                                supabase.table('pegawai').update({'photo_uploaded': True, 'photo_base64': url_foto}).eq('nip', nip_peg).execute()
                                 st.session_state.employees = get_data_pegawai()
+                                st.success("✅ Foto acuan berhasil disimpan!")
+                                time.sleep(1)
                                 st.rerun()
 
-    # --- 3. REKAP HARIAN ---
-    st.markdown("### 📋 3. Rekap Harian")
-    with st.form("form_filter_rekap"):
-        tgl_pilihan = st.date_input("Tanggal:")
-        opsi_sekolah = ["-- Pilih Sekolah --", "Semua Sekolah"] + st.session_state.schools['school_name'].tolist()
-        sekolah_pilihan = st.selectbox("Sekolah:", opsi_sekolah if admin_akses == "Semua Sekolah" else [admin_akses], disabled=(admin_akses != "Semua Sekolah"))
-        if st.form_submit_button("📊 TAMPILKAN"): st.session_state.show_data_rekap = (sekolah_pilihan != "-- Pilih Sekolah --")
+    # ------------------------------------------
+    # MENU 3: DASHBOARD CEK ABSENSI PEGAWAI
+    # ------------------------------------------
+    with tab_dashboard:
+        st.markdown("### 📊 Dashboard Cek Absensi Pegawai")
+        st.caption("Masukkan NIP pegawai dan pilih tanggal untuk mengecek status absensi (Sudah/Belum Absen).")
+        
+        col_d1, col_d2 = st.columns([2, 1])
+        with col_d1:
+            nip_check_input = st.text_input("Masukkan NIP Pegawai:", placeholder="Contoh: 198001012005011001", key="nip_check_dashboard")
+        with col_d2:
+            tgl_check_input = st.date_input("Pilih Tanggal:", datetime.date.today(), key="tgl_check_dashboard")
+            
+        btn_cek_dash = st.button("🔍 Cek Status Absensi", type="primary", use_container_width=True, key="btn_cek_absensi_dash")
+        
+        if btn_cek_dash:
+            if nip_check_input.strip():
+                st.session_state.last_checked_nip_dash = nip_check_input.strip()
+            else:
+                st.session_state.last_checked_nip_dash = None
+                st.warning("Silahkan masukkan NIP terlebih dahulu.")
 
-    if st.session_state.get('show_data_rekap', False):
-        df_emp = st.session_state.employees.copy()
-        if sekolah_pilihan != "Semua Sekolah": df_emp = df_emp[df_emp['school_name'] == sekolah_pilihan]
-        
-        if not df_emp.empty:
-            tgl_str = tgl_pilihan.strftime('%Y-%m-%d')
+        if st.session_state.last_checked_nip_dash:
+            cnip = st.session_state.last_checked_nip_dash
+            tgl_pilihan_str = tgl_check_input.strftime('%Y-%m-%d')
+            
+            # 1. Cek Master Data Pegawai
             try:
-                # OPTIMASI: Abaikan foto_bukti (mengurangi egress drastis)
-                res_absen_admin = supabase.table('absensi').select('nip, status, jam, jarak_m').eq('tanggal', tgl_str).execute()
-                df_absen_tgl = pd.DataFrame(res_absen_admin.data) if res_absen_admin.data else pd.DataFrame()
-            except: df_absen_tgl = pd.DataFrame()
-            
-            rekap_list = []
-            for _, emp in df_emp.iterrows():
-                nip = str(emp['nip'])
-                data_absen = df_absen_tgl[df_absen_tgl['nip'] == nip] if not df_absen_tgl.empty else pd.DataFrame()
-                jam_masuk = jam_pulang = jarak = '-'
-                status_final = 'Tanpa Keterangan'
+                q_p = supabase.table('pegawai').select('nip, name, school_name').eq('nip', str(cnip))
+                if admin_akses != "Semua Sekolah":
+                    q_p = q_p.eq('school_name', admin_akses)
+                res_p = q_p.execute()
+                df_p_check = pd.DataFrame(res_p.data) if res_p.data else pd.DataFrame()
+            except: df_p_check = pd.DataFrame()
+
+            if df_p_check.empty:
+                st.warning("⚠️ Data pegawai dengan NIP tersebut tidak ditemukan di sekolah ini.")
+            else:
+                emp_d = df_p_check.iloc[0]
                 
-                if not data_absen.empty:
-                    am = data_absen[data_absen['status'].str.contains('Masuk', na=False, case=False)]
-                    ap = data_absen[data_absen['status'].str.contains('Pulang', na=False, case=False)]
-                    al = data_absen[~data_absen['status'].str.contains('Hadir|Masuk|Pulang', na=False, case=False)]
-                    
-                    if not am.empty: jam_masuk, jarak, status_final = am.iloc[0]['jam'], am.iloc[0]['jarak_m'], am.iloc[0]['status']
-                    if not ap.empty: 
-                        jam_pulang = ap.iloc[0]['jam']
-                        if jarak == '-': jarak = ap.iloc[0]['jarak_m']
-                        status_final = f"{status_final} & {ap.iloc[0]['status']}" if not am.empty else ap.iloc[0]['status']
-                    if not al.empty: status_final, jarak = al.iloc[0]['status'], al.iloc[0]['jarak_m']
-                        
-                rekap_list.append({'NIP': nip, 'NAMA': emp['name'], 'SEKOLAH': emp['school_name'], 'TANGGAL': tgl_str, 'JARAK': str(jarak), 'MASUK': jam_masuk, 'PULANG': jam_pulang, 'STATUS': status_final})
-                
-            df_rekap = pd.DataFrame(rekap_list)
-            st.dataframe(df_rekap, use_container_width=True)
-            buffer = io.BytesIO()
-            with pd.ExcelWriter(buffer, engine='openpyxl') as writer: df_rekap.to_excel(writer, index=False)
-            st.download_button("📥 Download Excel", buffer.getvalue(), f"Rekap_{tgl_str}.xlsx")
-            
-    # --- 4. REKAP BULANAN ---
-    st.markdown("### 📊 4. Rekap Bulanan")
-    col_rek1, col_rek2 = st.columns(2)
-    filter_sch_rekap = col_rek1.selectbox("Pilih Sekolah:", ["-- Pilih Sekolah --"] + st.session_state.schools['school_name'].tolist() if admin_akses == "Semua Sekolah" else [admin_akses], disabled=(admin_akses != "Semua Sekolah"))
-    month_options = [(datetime.datetime.now() - datetime.timedelta(days=30*i)).strftime('%Y-%m') for i in range(12)]
-    filter_bln_rekap = col_rek2.selectbox("Bulan:", month_options)
-        
-    if st.button("📈 Tampilkan Rekap Bulanan", type="primary"):
-        if filter_sch_rekap != "-- Pilih Sekolah --":
-            with st.spinner("Menghitung kalkulasi..."):
+                # 2. Cek Log Absensi pada Tanggal
                 try:
-                    res_peg = supabase.table('pegawai').select('nip, name').eq('school_name', filter_sch_rekap).execute()
+                    res_a = supabase.table('absensi').select('status, jam, jarak_m, foto_bukti').eq('nip', str(cnip)).eq('tanggal', tgl_pilihan_str).execute()
+                    df_a_check = pd.DataFrame(res_a.data) if res_a.data else pd.DataFrame()
+                except: df_a_check = pd.DataFrame()
+                
+                st.markdown("---")
+                st.markdown(f"#### 👤 **{emp_d['name']}** (NIP: {cnip})")
+                st.markdown(f"🏫 **Sekolah:** {emp_d['school_name']} | 📅 **Tanggal:** {tgl_check_input.strftime('%d-%m-%Y')}")
+                
+                if df_a_check.empty:
+                    st.error("❌ **STATUS: BELUM LAKUKAN ABSENSI / TIDAK ADA CATATAN PRESENSI**")
+                else:
+                    st.success("✅ **STATUS: SUDAH MELAKUKAN ABSENSI**")
                     
-                    # OPTIMASI EGRESS: Hanya memanggil nip, tanggal, jam, status. (Ribuan row jauh lebih ringan)
-                    res_abs = supabase.table('absensi').select('nip, tanggal, jam, status').eq('sekolah', filter_sch_rekap).like('tanggal', f"{filter_bln_rekap}%").limit(5000).execute()
-                    
-                    if res_peg.data:
-                        rekap_data = {str(p['nip']): {'NIP': str(p['nip']), 'NAMA': p['name'], 'MENIT TERLAMBAT': 0, 'MENIT CEPAT PULANG': 0, 'JUMLAH KEHADIRAN': 0, 'TANPA KETERANGAN': 0, 'SAKIT': 0, 'DINAS LUAR': 0, 'CUTI': 0, '_tdk': 0} for p in res_peg.data}
-                        abs_dict = {}
-                        if res_abs.data:
-                            for a in res_abs.data:
-                                nip, tgl = str(a['nip']), a['tanggal']
-                                abs_dict.setdefault(nip, {}).setdefault(tgl, []).append(a)
+                    for idx_a, r_a in df_a_check.iterrows():
+                        with st.expander(f"📌 Presensi: {r_a.get('status', '-')} — Jam: {r_a.get('jam', '-')}", expanded=True):
+                            c_info, c_foto = st.columns([2, 1])
+                            c_info.write(f"**Status Log:** {r_a.get('status', '-')}")
+                            c_info.write(f"**Waktu Presensi:** {r_a.get('jam', '-')} WITA")
+                            c_info.write(f"**Jarak dari Sekolah:** {r_a.get('jarak_m', '-')} meter")
                             
-                        # Format standard output dataframe
-                        df_rekap = pd.DataFrame(list(rekap_data.values())).drop(columns=['_tdk'])
-                        st.dataframe(df_rekap, use_container_width=True)
-                        buffer = io.BytesIO()
-                        with pd.ExcelWriter(buffer, engine='openpyxl') as writer: df_rekap.to_excel(writer, index=False)
-                        st.download_button("📥 Download Excel", buffer.getvalue(), f"Rekap_{filter_bln_rekap}.xlsx")
-                except Exception as e: st.error(f"Gagal memuat rekap: {e}")
+                            foto_url = r_a.get('foto_bukti', '')
+                            if foto_url:
+                                c_foto.image(foto_url, caption="Foto Bukti Absen", use_container_width=True)
 
 # ==========================================
 # HAK AKSES 3: SUPERADMIN
@@ -661,7 +784,7 @@ elif st.session_state.role == "Superadmin":
         df_admins = get_data_admin()
         for idx, row in df_admins.iterrows():
             with st.expander(f"👤 {row['username']} - {row['sekolah']}"):
-                if st.button("🗑️ Hapus Admin", key=f"del_adm_{row['id']}"): # Perbaikan key menggunakan ID
+                if st.button("🗑️ Hapus Admin", key=f"del_adm_{row['id']}"):
                     supabase.table('admins').delete().eq('id', row['id']).execute()
                     st.rerun()
 
