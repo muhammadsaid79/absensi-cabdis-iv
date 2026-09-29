@@ -57,7 +57,7 @@ except Exception as e:
     st.stop()
 
 def upload_ke_supabase(file_bytes, file_path, content_type):
-    foto_pegawai = "absensi-files"
+    foto_pegawai = "foto_pegawai"
     try:
         supabase.storage.from_(foto_pegawai).upload(
             path=file_path,
