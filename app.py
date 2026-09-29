@@ -45,7 +45,10 @@ raw_url = os.environ.get("SUPABASE_URL") or st.secrets.get("SUPABASE_URL", "")
 raw_key = os.environ.get("SUPABASE_KEY") or st.secrets.get("SUPABASE_KEY", "")
 
 # Sanitasi URL untuk mencegah double-slash '//' yang memicu error PostgREST PGRST125
+# Sanitasi URL ekstra untuk membuang path REST yang tidak sengaja tertulis
 url = raw_url.strip().rstrip('/')
+if url.endswith('/rest/v1'):
+    url = url[:-8] # Membuang 8 karakter terakhir ('/rest/v1')
 key = raw_key.strip()
 
 try:
@@ -756,7 +759,7 @@ elif st.session_state.role == "Superadmin":
                         })
                     
                     # 4. Eksplisit tentukan Primary Key 'school_name' pada upsert
-                    supabase.table('sekolah').upsert(records, on_conflict='school_name').execute()
+                    supabase.table('sekolah').upsert(records).execute()
                     
                     # 5. Refresh status UI
                     st.session_state.schools = get_data_sekolah()
