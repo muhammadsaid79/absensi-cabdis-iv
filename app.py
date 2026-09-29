@@ -77,6 +77,28 @@ def tampilkan_peringatan_csv():
     if st.button("Oke, Saya Mengerti", key="btn_close_dialog_csv", use_container_width=True):
         st.rerun()
 
+# --- DIALOG PERINGATAN PENDAFTARAN PC BARU ---
+@st.dialog("⚠️ Peringatan Pendaftaran PC!")
+def konfirmasi_pendaftaran_pc(nama_pc, admin_sekolah):
+    st.warning("MAX HANYA 3 PC! PASTIKAN SUDAH MELAPORKAN KE ADMIN CABDIS (MOCHD GHAZALI/JEDDAH/GAZA) SEBELUM MENDAFTARKAN PC.")
+    st.write(f"Apakah Anda yakin ingin mendaftarkan **{nama_pc}**?")
+    
+    col_ya, col_batal = st.columns(2)
+    if col_ya.button("✅ Ya, Daftarkan", type="primary", use_container_width=True):
+        new_token = str(uuid.uuid4())
+        cookie_manager.set("school_device_token", new_token, key="set_pc_cookie_dialog")
+        supabase.table('perangkat_sekolah').insert({
+            'school_name': admin_sekolah, 
+            'device_id': new_token, 
+            'device_name': nama_pc
+        }).execute()
+        st.success("✅ PC berhasil didaftarkan!")
+        time.sleep(1)
+        st.rerun()
+        
+    if col_batal.button("❌ Batal", use_container_width=True):
+        st.rerun()
+
 # --- 1.5. FUNGSI KRIPTOGRAFI KEAMANAN ---
 SECRET_KEY = os.environ.get("COOKIE_SECRET") or st.secrets.get("COOKIE_SECRET")
 SUPERADMIN_PASSWORD = os.environ.get("SUPERADMIN_PASSWORD") or st.secrets.get("SUPERADMIN_PASSWORD")
@@ -437,37 +459,6 @@ elif st.session_state.role == "Admin":
     col_tombol.button("🚪 Logout", on_click=logout, use_container_width=True, key="btn_logout_top_admin")
     admin_akses = st.session_state.get('admin_sekolah', 'Semua Sekolah')
 
-    # CSS Khusus untuk menyembunyikan tombol trigger konfirmasi SweetAlert2
-    st.markdown("""
-        <style>
-        div.stButton > button:has(p:contains("CONFIRM_SAVE_PC_YES")), 
-        div.stButton > button:has(p:contains("CONFIRM_SAVE_PC_NO")) {
-            display: none !important;
-        }
-        </style>
-    """, unsafe_allow_html=True)
-
-    # Handler Tombol Konfirmasi Tersembunyi (SweetAlert2 Callback)
-    if st.button("CONFIRM_SAVE_PC_YES", key="btn_confirm_pc_yes_trigger"):
-        if st.session_state.pending_pc_name:
-            new_token = str(uuid.uuid4())
-            cookie_manager.set("school_device_token", new_token, key="set_pc_cookie_swal_confirm")
-            supabase.table('perangkat_sekolah').insert({
-                'school_name': admin_akses, 
-                'device_id': new_token, 
-                'device_name': st.session_state.pending_pc_name
-            }).execute()
-            st.session_state.pending_pc_name = None
-            st.success("✅ PC berhasil didaftarkan!")
-            time.sleep(1)
-            st.rerun()
-
-    if st.button("CONFIRM_SAVE_PC_NO", key="btn_confirm_pc_no_trigger"):
-        st.session_state.pending_pc_name = None
-        st.warning("Pendaftaran PC dibatalkan.")
-        time.sleep(1)
-        st.rerun()
-
     # Navigasi HANYA 3 MENU UTAMA
     tab_pc, tab_foto, tab_dashboard = st.tabs([
         "💻 1. Pendaftaran PC Sekolah", 
@@ -502,10 +493,9 @@ elif st.session_state.role == "Admin":
                     elif not nama_pc_input.strip():
                         st.error("Nama/Label PC wajib diisi!")
                     else:
-                        # Peringatan SweetAlert2 dipicu ketika mendaftarkan PC ke-2 atau seterusnya (total_terdaftar >= 1)
+                        # Peringatan Dialog bawaan Streamlit dipicu ketika mendaftarkan PC ke-2 atau seterusnya
                         if total_terdaftar >= 1:
-                            st.session_state.pending_pc_name = nama_pc_input.strip()
-                            st.rerun()
+                            konfirmasi_pendaftaran_pc(nama_pc_input.strip(), admin_akses)
                         else:
                             # Pendaftaran PC ke-1 langsung diproses
                             new_token = str(uuid.uuid4())
@@ -518,38 +508,6 @@ elif st.session_state.role == "Admin":
                             st.success("✅ PC ke-1 berhasil didaftarkan!")
                             time.sleep(1)
                             st.rerun()
-
-        # Eksekusi SweetAlert2 Popup Peringatan untuk PC ke-2 atau lebih
-        if st.session_state.pending_pc_name:
-            html_swal_pc = """
-            <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
-            <script>
-                setTimeout(() => {
-                    Swal.fire({
-                        title: 'Peringatan Pendaftaran PC!',
-                        text: 'MAX HANYA 3 PC PASTIKAN SUDAH MELAPORKAN KE ADMIN CABDIS (MOCHD GHAZALI/JEDDAH/GAZA) SEBELUM MENADFTARKAN PC',
-                        icon: 'warning',
-                        showCancelButton: true,
-                        confirmButtonText: 'Oke',
-                        cancelButtonText: 'Batal',
-                        allowOutsideClick: false,
-                        confirmButtonColor: '#2563EB',
-                        cancelButtonColor: '#d33'
-                    }).then((result) => {
-                        if (result.isConfirmed) {
-                            window.parent.document.querySelectorAll('p').forEach(p => {
-                                if(p.innerText === "CONFIRM_SAVE_PC_YES") p.closest('button').click();
-                            });
-                        } else {
-                            window.parent.document.querySelectorAll('p').forEach(p => {
-                                if(p.innerText === "CONFIRM_SAVE_PC_NO") p.closest('button').click();
-                            });
-                        }
-                    });
-                }, 100);
-            </script>
-            """
-            components.html(html_swal_pc, height=0)
 
         st.markdown("---")
         st.markdown("##### 📋 Daftar PC Resmi Terdaftar")
@@ -860,7 +818,7 @@ elif st.session_state.role == "Superadmin":
             st.rerun()
 
     with tab6:
-        st.markdown("### ⚙️️ Jam Kerja")
+        st.markdown("### ⚙ Jam Kerja")
         b_in = st.session_state.settings['batas_masuk'].iloc[0] if not st.session_state.settings.empty else '07:30'
         b_out = st.session_state.settings['batas_pulang'].iloc[0] if not st.session_state.settings.empty else '16:00'
         n_in = st.time_input("Batas Masuk", datetime.datetime.strptime(b_in, '%H:%M').time())
