@@ -261,12 +261,18 @@ def logout():
     st.session_state.wajah_terverifikasi = False 
     st.session_state.menu_unlocked = False
     st.session_state.edit_nip_target = None
+    
+    # --- TAMBAHAN KODE UNTUK MERESET PENCARIAN & MENCEGAH EGRESS ---
+    st.session_state.last_searched_nip_foto = None
+    st.session_state.last_checked_nip_dash = None
+    st.session_state.last_searched_school_pc = None
+    # ---------------------------------------------------------------
+    
     try:
         cookie_manager.delete("auth_token", key="delete_auth_token_btn")
         cookie_manager.delete("role", key="delete_role_btn") 
         cookie_manager.delete("admin_sekolah", key="delete_admin_sekolah_btn") 
     except: pass
-
 # ==========================================
 # HALAMAN LOGIN UTAMA
 # ==========================================
