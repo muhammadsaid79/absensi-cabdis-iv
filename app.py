@@ -45,7 +45,6 @@ raw_url = os.environ.get("SUPABASE_URL") or st.secrets.get("SUPABASE_URL", "")
 raw_key = os.environ.get("SUPABASE_KEY") or st.secrets.get("SUPABASE_KEY", "")
 
 # Sanitasi URL untuk mencegah double-slash '//' yang memicu error PostgREST PGRST125
-# Sanitasi URL ekstra untuk membuang path REST yang tidak sengaja tertulis
 url = raw_url.strip().rstrip('/')
 if url.endswith('/rest/v1'):
     url = url[:-8] # Membuang 8 karakter terakhir ('/rest/v1')
@@ -185,7 +184,16 @@ def get_data_pengaturan():
         return pd.DataFrame([{'batas_masuk': '07:30', 'batas_pulang': '16:00'}])
 
 # --- 5. INISIALISASI SESSION STATE ---
-for key_state, val in {'role': None, 'admin_sekolah': "Semua Sekolah", 'logout_triggered': False, 'wajah_terverifikasi': False, 'pending_pc_name': None, 'last_searched_nip_foto': None, 'last_checked_nip_dash': None}.items():
+for key_state, val in {
+    'role': None, 
+    'admin_sekolah': "Semua Sekolah", 
+    'logout_triggered': False, 
+    'wajah_terverifikasi': False, 
+    'pending_pc_name': None, 
+    'last_searched_nip_foto': None, 
+    'last_checked_nip_dash': None,
+    'last_searched_school_pc': None
+}.items():
     if key_state not in st.session_state: st.session_state[key_state] = val
 
 if 'schools' not in st.session_state: st.session_state.schools = get_data_sekolah()
@@ -493,11 +501,9 @@ elif st.session_state.role == "Admin":
                     elif not nama_pc_input.strip():
                         st.error("Nama/Label PC wajib diisi!")
                     else:
-                        # Peringatan Dialog bawaan Streamlit dipicu ketika mendaftarkan PC ke-2 atau seterusnya
                         if total_terdaftar >= 1:
                             konfirmasi_pendaftaran_pc(nama_pc_input.strip(), admin_akses)
                         else:
-                            # Pendaftaran PC ke-1 langsung diproses
                             new_token = str(uuid.uuid4())
                             cookie_manager.set("school_device_token", new_token, key="set_pc_cookie_1st")
                             supabase.table('perangkat_sekolah').insert({
@@ -536,7 +542,6 @@ elif st.session_state.role == "Admin":
                 st.session_state.last_searched_nip_foto = None
                 st.warning("Silahkan masukkan NIP terlebih dahulu.")
 
-        # Memuat pegawai berdasarkan NIP spesifik
         if st.session_state.last_searched_nip_foto:
             snip = st.session_state.last_searched_nip_foto
             try:
@@ -549,7 +554,6 @@ elif st.session_state.role == "Admin":
                 df_peg_found = pd.DataFrame()
 
             if df_peg_found.empty:
-                # SweetAlert2 Popup untuk NIP Tidak Ditemukan
                 html_swal_nip = """
                 <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
                 <script>
@@ -628,7 +632,6 @@ elif st.session_state.role == "Admin":
             cnip = st.session_state.last_checked_nip_dash
             tgl_pilihan_str = tgl_check_input.strftime('%Y-%m-%d')
             
-            # 1. Cek Master Data Pegawai
             try:
                 q_p = supabase.table('pegawai').select('nip, name, school_name').eq('nip', str(cnip))
                 if admin_akses != "Semua Sekolah":
@@ -642,7 +645,6 @@ elif st.session_state.role == "Admin":
             else:
                 emp_d = df_p_check.iloc[0]
                 
-                # 2. Cek Log Absensi pada Tanggal
                 try:
                     res_a = supabase.table('absensi').select('status, jam, jarak_m, foto_bukti').eq('nip', str(cnip)).eq('tanggal', tgl_pilihan_str).execute()
                     df_a_check = pd.DataFrame(res_a.data) if res_a.data else pd.DataFrame()
@@ -683,15 +685,11 @@ elif st.session_state.role == "Superadmin":
         edited_schools = st.data_editor(st.session_state.schools, num_rows="dynamic", use_container_width=True)
         if st.button("💾 Simpan Perubahan Sekolah", type="primary"):
             try:
-                # 1. Salin dataframe dan bersihkan string
                 df_clean = edited_schools.copy()
                 df_clean['school_name'] = df_clean['school_name'].astype(str).str.strip()
-                
-                # 2. Saring baris yang tidak valid/kosong
                 df_clean = df_clean[~df_clean['school_name'].isin(['', 'None', 'nan', 'NaN'])]
                 
                 if not df_clean.empty:
-                    # 3. Konversi ke tipe data native Python (mencegah bug serialisasi JSON/PostgREST)
                     records = []
                     for _, row in df_clean.iterrows():
                         try:
@@ -716,10 +714,7 @@ elif st.session_state.role == "Superadmin":
                             'radius_m': rad_val
                         })
                     
-                    # 4. Eksplisit tentukan Primary Key 'school_name' pada upsert
                     supabase.table('sekolah').upsert(records).execute()
-                    
-                    # 5. Refresh status UI
                     st.session_state.schools = get_data_sekolah()
                     st.success("✅ Data sekolah berhasil disimpan/diperbarui!")
                     time.sleep(1)
@@ -729,21 +724,44 @@ elif st.session_state.role == "Superadmin":
             except Exception as e:
                 st.error(f"❌ Gagal menyimpan ke database: {e}")
 
+    # -------------------------------------------------------------
+    # MENU PC SUPERADMIN: PENCARIAN SPESIFIK MENGHEMAT EGRESS SUPABASE
+    # -------------------------------------------------------------
     with tab_pc:
         st.markdown("### Buka Kunci PC")
-        sekolah_pilihan_pc = st.selectbox("Filter Sekolah:", ["Semua Sekolah"] + st.session_state.schools['school_name'].tolist())
-        try:
-            query_pc = supabase.table('perangkat_sekolah').select('id, school_name, device_name')
-            if sekolah_pilihan_pc != "Semua Sekolah": query_pc = query_pc.eq('school_name', sekolah_pilihan_pc)
-            res_pc_super = query_pc.execute()
-            if res_pc_super.data:
-                for idx, r_pc in pd.DataFrame(res_pc_super.data).iterrows():
-                    c1, c2, c3 = st.columns([2, 2, 1])
-                    c1.write(r_pc['school_name']); c2.write(r_pc['device_name'])
-                    if c3.button("🔓 Hapus Kunci", key=f"del_{r_pc['id']}"):
-                        supabase.table('perangkat_sekolah').delete().eq('id', r_pc['id']).execute()
-                        st.rerun()
-        except: pass
+        st.caption("Ketik nama sekolah secara spesifik untuk memuat data PC (mencegah beban muat seluruh data / egress membengkak).")
+        
+        with st.form("form_cari_pc_super"):
+            sekolah_input_pc = st.text_input("Masukkan Nama Sekolah:", placeholder="Contoh: SMAN 1 WAJO", key="input_sekolah_pc_super")
+            btn_cari_pc = st.form_submit_button("🔍 Cari PC Sekolah")
+            
+        if btn_cari_pc:
+            if sekolah_input_pc.strip():
+                st.session_state.last_searched_school_pc = sekolah_input_pc.strip()
+            else:
+                st.session_state.last_searched_school_pc = None
+                st.warning("Silahkan ketik nama sekolah terlebih dahulu.")
+                
+        if st.session_state.get('last_searched_school_pc'):
+            nama_sekolah_dicari = st.session_state.last_searched_school_pc
+            try:
+                res_pc_super = supabase.table('perangkat_sekolah').select('id, school_name, device_name').ilike('school_name', f"%{nama_sekolah_dicari}%").execute()
+                
+                if res_pc_super.data:
+                    st.success(f"✅ Ditemukan {len(res_pc_super.data)} PC terdaftar untuk pencarian: **{nama_sekolah_dicari}**")
+                    for idx, r_pc in pd.DataFrame(res_pc_super.data).iterrows():
+                        c1, c2, c3 = st.columns([2, 2, 1])
+                        c1.write(r_pc['school_name'])
+                        c2.write(r_pc['device_name'])
+                        if c3.button("🔓 Hapus Kunci", key=f"del_pc_super_{r_pc['id']}"):
+                            supabase.table('perangkat_sekolah').delete().eq('id', r_pc['id']).execute()
+                            st.success(f"Kunci PC {r_pc['device_name']} berhasil dihapus!")
+                            time.sleep(1)
+                            st.rerun()
+                else:
+                    st.info(f"Tidak ada PC terdaftar untuk nama sekolah: **{nama_sekolah_dicari}**")
+            except Exception as e: 
+                st.error(f"Gagal mengambil data dari Supabase: {e}")
 
     with tab2:
         st.markdown("### Upload Pegawai Massal (CSV/Excel)")
