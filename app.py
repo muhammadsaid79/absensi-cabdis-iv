@@ -733,7 +733,7 @@ elif st.session_state.role == "Superadmin":
                     
                     records = df_clean.to_dict(orient='records')
                     
-                    # 4. Simpan / Update data sekolah satu per satu
+                    # 4. Simpan / Update data sekolah satu per satu secara manual
                     for rec in records:
                         s_name = rec['school_name']
                         res = supabase.table('sekolah').select('school_name').eq('school_name', s_name).execute()
