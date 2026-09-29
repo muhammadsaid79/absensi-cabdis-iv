@@ -627,13 +627,41 @@ elif st.session_state.role == "Superadmin":
                 st.success("✅ Berhasil upload pegawai!")
                 st.rerun()
             except Exception as e: st.error(f"Gagal: {e}")
+            
+        st.markdown("---")
+        st.markdown("### 🗑️ Hapus Data Pegawai Spesifik")
+        hapus_nip = st.text_input("Masukkan NIP Pegawai yang ingin dihapus:")
+        if st.button("Hapus Pegawai", type="primary"):
+            if hapus_nip:
+                supabase.table('pegawai').delete().eq('nip', hapus_nip).execute()
+                st.success(f"Pegawai dengan NIP {hapus_nip} berhasil dihapus!")
+                st.session_state.employees = get_data_pegawai()
+                time.sleep(1)
+                st.rerun()
 
     with tab3:
-        st.markdown("### Kelola Admin")
+        st.markdown("### ➕ Tambah Admin Baru")
+        with st.form("form_tambah_admin"):
+            new_user = st.text_input("Username Baru")
+            new_pass = st.text_input("Password", type="password")
+            opsi_sekolah_admin = ["Semua Sekolah"] + st.session_state.schools['school_name'].tolist()
+            new_sekolah = st.selectbox("Akses Sekolah", opsi_sekolah_admin)
+            
+            if st.form_submit_button("Simpan Admin"):
+                if new_user and new_pass:
+                    supabase.table('admins').insert({'username': new_user, 'password': new_pass, 'sekolah': new_sekolah}).execute()
+                    st.success("Admin berhasil ditambahkan!")
+                    time.sleep(1)
+                    st.rerun()
+                else:
+                    st.error("Username dan Password wajib diisi!")
+        
+        st.markdown("---")
+        st.markdown("### 📋 Kelola Admin (Hapus)")
         df_admins = get_data_admin()
         for idx, row in df_admins.iterrows():
             with st.expander(f"👤 {row['username']} - {row['sekolah']}"):
-                if st.button("🗑️ Hapus Admin", key=f"del_adm_{idx}"):
+                if st.button("🗑️ Hapus Admin", key=f"del_adm_{row['id']}"): # Perbaikan key menggunakan ID
                     supabase.table('admins').delete().eq('id', row['id']).execute()
                     st.rerun()
 
@@ -649,6 +677,15 @@ elif st.session_state.role == "Superadmin":
         if st.button("🖼️ Hapus Semua Foto (Teks Aman)", type="primary"):
             supabase.table('absensi').update({'foto_bukti': ''}).neq('foto_bukti', '').execute()
             st.success("Foto fisik berhasil diputus dari database (Hemat Egress).")
+            
+        st.markdown("---")
+        st.markdown("### 🗑️ Hapus Data Absensi Harian")
+        tgl_hapus = st.date_input("Pilih Tanggal Absensi yang akan dihapus:")
+        if st.button(f"Hapus Absensi Tanggal {tgl_hapus.strftime('%d-%m-%Y')}"):
+            supabase.table('absensi').delete().eq('tanggal', tgl_hapus.strftime('%Y-%m-%d')).execute()
+            st.success(f"Seluruh data absensi pada tanggal {tgl_hapus.strftime('%d-%m-%Y')} berhasil dihapus permanen!")
+            time.sleep(1)
+            st.rerun()
 
     with tab6:
         st.markdown("### ⚙️ Jam Kerja")
