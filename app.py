@@ -722,7 +722,7 @@ elif st.session_state.role == "Superadmin":
                 df_clean = edited_schools.copy()
                 df_clean['school_name'] = df_clean['school_name'].astype(str).str.strip()
                 
-                # 2. Saring hanya baris yang memiliki nama sekolah valid (bukan string kosong/None/NaN)
+                # 2. Saring hanya baris yang memiliki nama sekolah valid
                 df_clean = df_clean[~df_clean['school_name'].isin(['', 'None', 'nan', 'NaN'])]
                 
                 if not df_clean.empty:
@@ -733,8 +733,20 @@ elif st.session_state.role == "Superadmin":
                     
                     records = df_clean.to_dict(orient='records')
                     
-                    # 4. Eksekusi Upsert
-                    supabase.table('sekolah').upsert(records, on_conflict='school_name').execute()
+                    # 4. Simpan / Update data sekolah satu per satu
+                    for rec in records:
+                        s_name = rec['school_name']
+                        res = supabase.table('sekolah').select('school_name').eq('school_name', s_name).execute()
+                        if res.data:
+                            # Update jika sekolah sudah ada
+                            supabase.table('sekolah').update({
+                                'lat': rec['lat'],
+                                'lng': rec['lng'],
+                                'radius_m': rec['radius_m']
+                            }).eq('school_name', s_name).execute()
+                        else:
+                            # Insert jika sekolah baru
+                            supabase.table('sekolah').insert(rec).execute()
                     
                     # 5. Refresh data aplikasi
                     st.session_state.schools = get_data_sekolah()
@@ -745,7 +757,6 @@ elif st.session_state.role == "Superadmin":
                     st.warning("⚠️ Silahkan isi nama sekolah terlebih dahulu.")
             except Exception as e:
                 st.error(f"❌ Gagal menyimpan ke database: {e}")
-                st.info("💡 **Tips:** Pastikan perintah SQL pada Langkah 1 sudah berhasil dijalankan di SQL Editor Supabase.")
     with tab_pc:
         st.markdown("### Buka Kunci PC")
         sekolah_pilihan_pc = st.selectbox("Filter Sekolah:", ["Semua Sekolah"] + st.session_state.schools['school_name'].tolist())
