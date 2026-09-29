@@ -713,14 +713,37 @@ elif st.session_state.role == "Superadmin":
     
     tab1, tab_pc, tab2, tab3, tab4, tab5, tab6 = st.tabs(["🏛️ Sekolah", "💻 PC", "👥 Pegawai", "🔑 Admin", "📝 Izin", "🚨 Database", "⚙️ Jam"])
     
-    with tab1:
+   with tab1:
         st.markdown("### Sekolah Aktif")
         edited_schools = st.data_editor(st.session_state.schools, num_rows="dynamic", use_container_width=True)
         if st.button("💾 Simpan Perubahan Sekolah", type="primary"):
-            records = edited_schools.to_dict(orient='records')
-            if records: supabase.table('sekolah').upsert(records, on_conflict='school_name').execute()
-            st.session_state.schools = get_data_sekolah()
-            st.rerun()
+            try:
+                # 1. Hapus baris yang nama sekolahnya kosong (NaN/None)
+                df_clean = edited_schools.dropna(subset=['school_name']).copy()
+                
+                if not df_clean.empty:
+                    # 2. Rapikan dan pastikan tipe data sesuai dengan struktur database
+                    df_clean['school_name'] = df_clean['school_name'].astype(str).str.strip()
+                    df_clean['lat'] = pd.to_numeric(df_clean['lat'], errors='coerce').fillna(0.0)
+                    df_clean['lng'] = pd.to_numeric(df_clean['lng'], errors='coerce').fillna(0.0)
+                    df_clean['radius_m'] = pd.to_numeric(df_clean['radius_m'], errors='coerce').fillna(100).astype(int)
+                    
+                    # 3. Ubah DataFrame menjadi list of dict
+                    records = df_clean.to_dict(orient='records')
+                    
+                    # 4. Eksekusi UPSERT menggunakan 'school_name' sebagai acuan
+                    supabase.table('sekolah').upsert(records, on_conflict='school_name').execute()
+                    
+                    # 5. Perbarui session state & muat ulang halaman
+                    st.session_state.schools = get_data_sekolah()
+                    st.success("✅ Data sekolah berhasil disimpan/diperbarui!")
+                    time.sleep(1)
+                    st.rerun()
+                else:
+                    st.warning("⚠️ Kolom 'school_name' tidak boleh kosong.")
+            except Exception as e:
+                st.error(f"❌ Gagal menyimpan ke database: {e}")
+                st.info("💡 Pastikan perintah SQL di Langkah 1 sudah berhasil dijalankan di Supabase.")
 
     with tab_pc:
         st.markdown("### Buka Kunci PC")
