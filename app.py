@@ -713,7 +713,7 @@ elif st.session_state.role == "Superadmin":
     
     tab1, tab_pc, tab2, tab3, tab4, tab5, tab6 = st.tabs(["🏛️ Sekolah", "💻 PC", "👥 Pegawai", "🔑 Admin", "📝 Izin", "🚨 Database", "⚙️ Jam"])
     
-   with tab1:
+    with tab1:
         st.markdown("### Sekolah Aktif")
         edited_schools = st.data_editor(st.session_state.schools, num_rows="dynamic", use_container_width=True)
         if st.button("💾 Simpan Perubahan Sekolah", type="primary"):
