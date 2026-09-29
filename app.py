@@ -718,37 +718,26 @@ elif st.session_state.role == "Superadmin":
         edited_schools = st.data_editor(st.session_state.schools, num_rows="dynamic", use_container_width=True)
         if st.button("💾 Simpan Perubahan Sekolah", type="primary"):
             try:
-                # 1. Salin dataframe dan bersihkan spasi
+                # 1. Salin dataframe dan bersihkan spasi ekstra di awal/akhir
                 df_clean = edited_schools.copy()
                 df_clean['school_name'] = df_clean['school_name'].astype(str).str.strip()
                 
-                # 2. Saring hanya baris yang memiliki nama sekolah valid
+                # 2. Saring baris yang tidak valid
                 df_clean = df_clean[~df_clean['school_name'].isin(['', 'None', 'nan', 'NaN'])]
                 
                 if not df_clean.empty:
-                    # 3. Konversi nilai numerik koordinat dan radius
+                    # 3. Konversi format angka untuk koordinat dan radius
                     df_clean['lat'] = pd.to_numeric(df_clean['lat'], errors='coerce').fillna(0.0)
                     df_clean['lng'] = pd.to_numeric(df_clean['lng'], errors='coerce').fillna(0.0)
                     df_clean['radius_m'] = pd.to_numeric(df_clean['radius_m'], errors='coerce').fillna(100).astype(int)
                     
                     records = df_clean.to_dict(orient='records')
                     
-                    # 4. Simpan / Update data sekolah satu per satu secara manual
-                    for rec in records:
-                        s_name = rec['school_name']
-                        res = supabase.table('sekolah').select('school_name').eq('school_name', s_name).execute()
-                        if res.data:
-                            # Update jika sekolah sudah ada
-                            supabase.table('sekolah').update({
-                                'lat': rec['lat'],
-                                'lng': rec['lng'],
-                                'radius_m': rec['radius_m']
-                            }).eq('school_name', s_name).execute()
-                        else:
-                            # Insert jika sekolah baru
-                            supabase.table('sekolah').insert(rec).execute()
+                    # 4. Gunakan upsert TANPA parameter on_conflict
+                    # Data dikirim via JSON, spasi pada nama sekolah tidak akan merusak URL
+                    supabase.table('sekolah').upsert(records).execute()
                     
-                    # 5. Refresh data aplikasi
+                    # 5. Refresh status UI
                     st.session_state.schools = get_data_sekolah()
                     st.success("✅ Data sekolah berhasil disimpan/diperbarui!")
                     time.sleep(1)
