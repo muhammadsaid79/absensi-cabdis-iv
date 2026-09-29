@@ -742,10 +742,10 @@ elif st.session_state.role == "Superadmin":
                     time.sleep(1)
                     st.rerun()
                 else:
-                    st.warning("⚠️️ Silahkan isi nama sekolah terlebih dahulu.")
+                    st.warning("⚠️ Silahkan isi nama sekolah terlebih dahulu.")
             except Exception as e:
                 st.error(f"❌ Gagal menyimpan ke database: {e}")
-
+                st.info("💡 **Tips:** Pastikan perintah SQL pada Langkah 1 sudah berhasil dijalankan di SQL Editor Supabase.")
     with tab_pc:
         st.markdown("### Buka Kunci PC")
         sekolah_pilihan_pc = st.selectbox("Filter Sekolah:", ["Semua Sekolah"] + st.session_state.schools['school_name'].tolist())
