@@ -444,7 +444,7 @@ elif st.session_state.role == "Admin":
         st.markdown("##### ➕ Daftarkan PC Ini")
         st.caption(f"Status Kuota Perangkat: **{total_terdaftar} dari 2 PC Terdaftar**")
 
-        if total_terdaftar >= 2:
+        if total_terdaftar >= 3:
             st.warning("🔒 **PENDAFTARAN TERKUNCI!** Hubungi Superadmin.")
         else:
             nama_pc_input = st.text_input("Nama/Label PC", key="inp_nama_pc_baru")
