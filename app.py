@@ -230,7 +230,8 @@ for key_state, val in {
     'last_searched_nip_foto': None, 
     'last_checked_nip_dash': None,
     'last_searched_school_pc': None,
-    'menu_unlocked': False
+    'menu_unlocked': False,
+    'edit_nip_target': None
 }.items():
     if key_state not in st.session_state: st.session_state[key_state] = val
 
@@ -259,6 +260,7 @@ def logout():
     st.session_state.logout_triggered = True 
     st.session_state.wajah_terverifikasi = False 
     st.session_state.menu_unlocked = False
+    st.session_state.edit_nip_target = None
     try:
         cookie_manager.delete("auth_token", key="delete_auth_token_btn")
         cookie_manager.delete("role", key="delete_role_btn") 
@@ -561,7 +563,7 @@ elif st.session_state.role == "Admin":
             st.info("Belum ada PC terdaftar untuk sekolah ini.")
 
     # ------------------------------------------
-    # MENU 2: UPLOAD FOTO PEGAWAI
+    # MENU 2: UPLOAD FOTO PEGAWAI (TERKUNCI SETELAH UPLOAD)
     # ------------------------------------------
     with tab_foto:
         st.markdown("### 📸 Upload Foto Pegawai")
@@ -614,7 +616,7 @@ elif st.session_state.role == "Admin":
                 is_cadar = str(emp.get('is_cadar', 'False')).lower() == 'true'
                 is_uploaded = str(emp.get('photo_uploaded', False)).lower() == 'true'
                 
-                status_str = "🧕 Cadar (Audit)" if is_cadar else ("🟢 Foto Terunggah" if is_uploaded else "🔴 Belum Ada Foto")
+                status_str = "🧕 Cadar (Audit)" if is_cadar else ("🟢 Foto Terunggah (Terkunci)" if is_uploaded else "🔴 Belum Ada Foto")
                 st.success(f"✅ Data Ditemukan: **{nama_peg}** ({status_str})")
                 
                 col_f_kiri, col_f_kanan = st.columns([1, 2])
@@ -630,7 +632,7 @@ elif st.session_state.role == "Admin":
                     st.write(f"**Sekolah:** {emp['school_name']}")
                     
                     if is_uploaded:
-                        st.warning("🔒 Foto acuan sudah tersimpan dan terkunci.")
+                        st.warning("🔒 **FOTO TERKUNCI!** Foto acuan pegawai ini telah diunggah dan terkunci. Jika ingin mengubah foto, silakan hubungi Superadmin untuk membukakan kuncinya.")
                     else:
                         foto_file = st.file_uploader("Pilih Foto Acuan Pegawai (JPG/PNG):", type=['jpg', 'jpeg', 'png'], key=f"up_foto_file_{nip_peg}")
                         if foto_file and st.button("💾 Simpan Foto Acuan", key=f"btn_save_foto_{nip_peg}", use_container_width=True):
@@ -638,7 +640,7 @@ elif st.session_state.role == "Admin":
                             url_foto = upload_ke_supabase(file_bytes, f"foto_acuan/{nip_peg}.jpg", "image/jpeg")
                             if url_foto:
                                 supabase.table('pegawai').update({'photo_uploaded': True, 'photo_base64': url_foto}).eq('nip', nip_peg).execute()
-                                st.success("✅ Foto acuan berhasil disimpan!")
+                                st.success("✅ Foto acuan berhasil disimpan & otomatis terkunci!")
                                 time.sleep(1)
                                 st.rerun()
 
@@ -931,7 +933,7 @@ elif st.session_state.role == "Superadmin":
                     st.error(f"Gagal mengambil data dari Supabase: {e}")
 
     # ------------------------------------------
-    # 5. TAB PEGAWAI (TERKUNCI)
+    # 5. TAB PEGAWAI (TERKUNCI) + BUKA KUNCI FOTO
     # ------------------------------------------
     with tab_pegawai:
         if not st.session_state['menu_unlocked']:
@@ -1035,12 +1037,12 @@ elif st.session_state.role == "Superadmin":
                     time.sleep(1)
                     st.rerun()
                     
-            # --- FEATURE 4: EDIT DATA PEGAWAI & STATUS CADAR ---
-            st.markdown("### ✏️ Edit Data Pegawai & Status Cadar")
+            # --- FEATURE 4: EDIT DATA PEGAWAI, STATUS CADAR & BUKA KUNCI FOTO ---
+            st.markdown("### ✏️ Edit Data Pegawai & Buka Kunci Foto")
             st.caption("Cari berdasarkan NIP untuk meminimalkan beban database (Hemat Egress).")
 
             with st.form("form_cari_edit_pegawai"):
-                edit_nip_cari = st.text_input("Masukkan NIP Pegawai yang ingin diedit:", placeholder="Contoh: 198001012005011001", key="nip_edit_cari")
+                edit_nip_cari = st.text_input("Masukkan NIP Pegawai yang ingin diedit/dibuka kuncinya:", placeholder="Contoh: 198001012005011001", key="nip_edit_cari")
                 btn_cari_edit = st.form_submit_button("🔍 Cari Pegawai")
 
             if btn_cari_edit:
@@ -1050,12 +1052,11 @@ elif st.session_state.role == "Superadmin":
                     st.session_state.edit_nip_target = None
                     st.warning("Silahkan masukkan NIP terlebih dahulu.")
 
-            # Hanya fetch data dari Supabase jika NIP sudah diinputkan (Hemat Egress)
+            # Hanya fetch data dari Supabase jika NIP sudah diinputkan
             if st.session_state.get('edit_nip_target'):
                 target_nip = st.session_state.edit_nip_target
                 try:
-                    # Fetching spesifik 1 row, sangat ringan untuk Supabase
-                    res_edit = supabase.table('pegawai').select('nip, name, school_name, is_cadar').eq('nip', target_nip).execute()
+                    res_edit = supabase.table('pegawai').select('nip, name, school_name, photo_uploaded, photo_base64, is_cadar').eq('nip', target_nip).execute()
                     df_edit = pd.DataFrame(res_edit.data) if res_edit.data else pd.DataFrame()
                 except Exception as e:
                     df_edit = pd.DataFrame()
@@ -1085,18 +1086,33 @@ elif st.session_state.role == "Superadmin":
                         current_cadar = str(emp_edit.get('is_cadar', 'False')).lower() == 'true'
                         edit_cadar = st.checkbox("🧕 Tandai sebagai Pegawai Bercadar (Bypass Wajah / Mode Audit)", value=current_cadar)
                         
+                        # --- MODUL BUKA KUNCI FOTO OLEH SUPERADMIN ---
+                        current_photo_uploaded = str(emp_edit.get('photo_uploaded', 'False')).lower() == 'true'
+                        if current_photo_uploaded:
+                            st.warning("🔒 Status Foto Pegawai saat ini: **TERKUNCI (Sudah Diunggah)**")
+                            buka_kunci_foto = st.checkbox("🔓 Centang di sini untuk MEMBUKA KUNCI FOTO (Izinkan Admin Sekolah mengunggah ulang foto acuan)")
+                        else:
+                            st.info("🟢 Status Foto Pegawai saat ini: **BELUM TERKUNCI / BELUM ADA FOTO**")
+                            buka_kunci_foto = False
+
                         btn_simpan_edit = st.form_submit_button("💾 Update Data Pegawai")
                         
                         if btn_simpan_edit:
                             try:
-                                supabase.table('pegawai').update({
+                                update_payload = {
                                     'name': edit_nama.strip(),
                                     'school_name': edit_sekolah.strip(),
                                     'is_cadar': edit_cadar
-                                }).eq('nip', target_nip).execute()
+                                }
                                 
-                                st.success("✅ Data pegawai berhasil diperbarui!")
-                                st.session_state.edit_nip_target = None # Reset state agar form pencarian bersih kembali
+                                # Jika Superadmin mencentang buka kunci foto
+                                if current_photo_uploaded and buka_kunci_foto:
+                                    update_payload['photo_uploaded'] = False
+                                    
+                                supabase.table('pegawai').update(update_payload).eq('nip', target_nip).execute()
+                                
+                                st.success("✅ Data pegawai & status kunci berhasil diperbarui!")
+                                st.session_state.edit_nip_target = None
                                 time.sleep(1)
                                 st.rerun()
                             except Exception as e:
@@ -1160,7 +1176,7 @@ elif st.session_state.role == "Superadmin":
                 st.success("Foto fisik berhasil diputus dari database (Hemat Egress).")
                 
             st.markdown("---")
-            st.markdown("### 🗑️️ Hapus Data Absensi Harian")
+            st.markdown("### 🗑 Hapus Data Absensi Harian")
             tgl_hapus = st.date_input("Pilih Tanggal Absensi yang akan dihapus:")
             if st.button(f"Hapus Absensi Tanggal {tgl_hapus.strftime('%d-%m-%Y')}"):
                 supabase.table('absensi').delete().eq('tanggal', tgl_hapus.strftime('%Y-%m-%d')).execute()
