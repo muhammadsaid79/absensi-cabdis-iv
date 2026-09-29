@@ -41,8 +41,12 @@ def kompres_foto(image_bytes, quality=50, max_size=(400, 400)):
 # --- 1. MEMUAT ENVIRONMENT VARIABLES & SUPABASE ---
 load_dotenv()
 
-url = os.environ.get("SUPABASE_URL") or st.secrets.get("SUPABASE_URL", "")
-key = os.environ.get("SUPABASE_KEY") or st.secrets.get("SUPABASE_KEY", "")
+raw_url = os.environ.get("SUPABASE_URL") or st.secrets.get("SUPABASE_URL", "")
+raw_key = os.environ.get("SUPABASE_KEY") or st.secrets.get("SUPABASE_KEY", "")
+
+# Sanitasi URL untuk mencegah double-slash '//' yang memicu error PostgREST PGRST125
+url = raw_url.strip().rstrip('/')
+key = raw_key.strip()
 
 try:
     supabase: Client = create_client(url, key)
@@ -718,24 +722,41 @@ elif st.session_state.role == "Superadmin":
         edited_schools = st.data_editor(st.session_state.schools, num_rows="dynamic", use_container_width=True)
         if st.button("💾 Simpan Perubahan Sekolah", type="primary"):
             try:
-                # 1. Salin dataframe dan bersihkan spasi ekstra di awal/akhir
+                # 1. Salin dataframe dan bersihkan string
                 df_clean = edited_schools.copy()
                 df_clean['school_name'] = df_clean['school_name'].astype(str).str.strip()
                 
-                # 2. Saring baris yang tidak valid
+                # 2. Saring baris yang tidak valid/kosong
                 df_clean = df_clean[~df_clean['school_name'].isin(['', 'None', 'nan', 'NaN'])]
                 
                 if not df_clean.empty:
-                    # 3. Konversi format angka untuk koordinat dan radius
-                    df_clean['lat'] = pd.to_numeric(df_clean['lat'], errors='coerce').fillna(0.0)
-                    df_clean['lng'] = pd.to_numeric(df_clean['lng'], errors='coerce').fillna(0.0)
-                    df_clean['radius_m'] = pd.to_numeric(df_clean['radius_m'], errors='coerce').fillna(100).astype(int)
+                    # 3. Konversi ke tipe data native Python (mencegah bug serialisasi JSON/PostgREST)
+                    records = []
+                    for _, row in df_clean.iterrows():
+                        try:
+                            lat_val = float(row['lat']) if pd.notna(row['lat']) else 0.0
+                        except:
+                            lat_val = 0.0
+                            
+                        try:
+                            lng_val = float(row['lng']) if pd.notna(row['lng']) else 0.0
+                        except:
+                            lng_val = 0.0
+                            
+                        try:
+                            rad_val = int(row['radius_m']) if pd.notna(row['radius_m']) else 100
+                        except:
+                            rad_val = 100
+
+                        records.append({
+                            'school_name': str(row['school_name']).strip(),
+                            'lat': lat_val,
+                            'lng': lng_val,
+                            'radius_m': rad_val
+                        })
                     
-                    records = df_clean.to_dict(orient='records')
-                    
-                    # 4. Gunakan upsert TANPA parameter on_conflict
-                    # Data dikirim via JSON, spasi pada nama sekolah tidak akan merusak URL
-                    supabase.table('sekolah').upsert(records).execute()
+                    # 4. Eksplisit tentukan Primary Key 'school_name' pada upsert
+                    supabase.table('sekolah').upsert(records, on_conflict='school_name').execute()
                     
                     # 5. Refresh status UI
                     st.session_state.schools = get_data_sekolah()
@@ -746,6 +767,7 @@ elif st.session_state.role == "Superadmin":
                     st.warning("⚠️ Silahkan isi nama sekolah terlebih dahulu.")
             except Exception as e:
                 st.error(f"❌ Gagal menyimpan ke database: {e}")
+
     with tab_pc:
         st.markdown("### Buka Kunci PC")
         sekolah_pilihan_pc = st.selectbox("Filter Sekolah:", ["Semua Sekolah"] + st.session_state.schools['school_name'].tolist())
@@ -835,7 +857,7 @@ elif st.session_state.role == "Superadmin":
             st.rerun()
 
     with tab6:
-        st.markdown("### ⚙️ Jam Kerja")
+        st.markdown("### ⚙️️ Jam Kerja")
         b_in = st.session_state.settings['batas_masuk'].iloc[0] if not st.session_state.settings.empty else '07:30'
         b_out = st.session_state.settings['batas_pulang'].iloc[0] if not st.session_state.settings.empty else '16:00'
         n_in = st.time_input("Batas Masuk", datetime.datetime.strptime(b_in, '%H:%M').time())
