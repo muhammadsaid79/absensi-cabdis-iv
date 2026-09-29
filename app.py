@@ -256,7 +256,7 @@ st.sidebar.write("---")
 waktu_sekarang = datetime.datetime.now(pytz.timezone('Asia/Makassar'))
 st.sidebar.markdown("**Waktu Server (WITA):**")
 st.sidebar.info(f"🕒 {waktu_sekarang.strftime('%H:%M:%S')} WITA\n\n📅 {waktu_sekarang.strftime('%d-%m-%Y')}")
-st.sidebar.caption("Jam ini yang akan terekam di absensi.")
+st.sidebar.caption("JAM INI YANG AKAN TEREKAM DI ABSENSI BAPK/IBU.")
 st.sidebar.write("---")
 
 # ==========================================
