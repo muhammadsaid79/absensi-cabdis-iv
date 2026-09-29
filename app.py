@@ -1034,6 +1034,73 @@ elif st.session_state.role == "Superadmin":
                     st.success(f"Pegawai dengan NIP {hapus_nip} berhasil dihapus!")
                     time.sleep(1)
                     st.rerun()
+                    
+            # --- FEATURE 4: EDIT DATA PEGAWAI & STATUS CADAR ---
+            st.markdown("### ✏️ Edit Data Pegawai & Status Cadar")
+            st.caption("Cari berdasarkan NIP untuk meminimalkan beban database (Hemat Egress).")
+
+            with st.form("form_cari_edit_pegawai"):
+                edit_nip_cari = st.text_input("Masukkan NIP Pegawai yang ingin diedit:", placeholder="Contoh: 198001012005011001", key="nip_edit_cari")
+                btn_cari_edit = st.form_submit_button("🔍 Cari Pegawai")
+
+            if btn_cari_edit:
+                if edit_nip_cari.strip():
+                    st.session_state.edit_nip_target = edit_nip_cari.strip()
+                else:
+                    st.session_state.edit_nip_target = None
+                    st.warning("Silahkan masukkan NIP terlebih dahulu.")
+
+            # Hanya fetch data dari Supabase jika NIP sudah diinputkan (Hemat Egress)
+            if st.session_state.get('edit_nip_target'):
+                target_nip = st.session_state.edit_nip_target
+                try:
+                    # Fetching spesifik 1 row, sangat ringan untuk Supabase
+                    res_edit = supabase.table('pegawai').select('nip, name, school_name, is_cadar').eq('nip', target_nip).execute()
+                    df_edit = pd.DataFrame(res_edit.data) if res_edit.data else pd.DataFrame()
+                except Exception as e:
+                    df_edit = pd.DataFrame()
+                    st.error(f"Gagal mengambil data: {e}")
+
+                if df_edit.empty:
+                    st.warning(f"⚠️ Pegawai dengan NIP {target_nip} tidak ditemukan.")
+                else:
+                    emp_edit = df_edit.iloc[0]
+                    
+                    with st.form("form_update_pegawai"):
+                        st.info(f"Mengedit data untuk NIP: **{target_nip}**")
+                        
+                        edit_nama = st.text_input("Nama Pegawai:", value=emp_edit.get('name', ''))
+                        
+                        df_sch_opt_edit = get_data_sekolah()
+                        opsi_sekolah_edit = df_sch_opt_edit['school_name'].tolist() if not df_sch_opt_edit.empty else []
+                        current_school = emp_edit.get('school_name', '')
+                        
+                        try:
+                            idx_school = opsi_sekolah_edit.index(current_school) if current_school in opsi_sekolah_edit else 0
+                        except:
+                            idx_school = 0
+                            
+                        edit_sekolah = st.selectbox("Sekolah / Unit Kerja:", opsi_sekolah_edit, index=idx_school)
+                        
+                        current_cadar = str(emp_edit.get('is_cadar', 'False')).lower() == 'true'
+                        edit_cadar = st.checkbox("🧕 Tandai sebagai Pegawai Bercadar (Bypass Wajah / Mode Audit)", value=current_cadar)
+                        
+                        btn_simpan_edit = st.form_submit_button("💾 Update Data Pegawai")
+                        
+                        if btn_simpan_edit:
+                            try:
+                                supabase.table('pegawai').update({
+                                    'name': edit_nama.strip(),
+                                    'school_name': edit_sekolah.strip(),
+                                    'is_cadar': edit_cadar
+                                }).eq('nip', target_nip).execute()
+                                
+                                st.success("✅ Data pegawai berhasil diperbarui!")
+                                st.session_state.edit_nip_target = None # Reset state agar form pencarian bersih kembali
+                                time.sleep(1)
+                                st.rerun()
+                            except Exception as e:
+                                st.error(f"Gagal memperbarui data: {e}")
 
     # ------------------------------------------
     # 6. TAB ADMIN (TERKUNCI)
