@@ -937,18 +937,95 @@ elif st.session_state.role == "Superadmin":
         if not st.session_state['menu_unlocked']:
             tampilkan_form_kunci("Pegawai")
         else:
-            st.markdown("### Upload Pegawai Massal (CSV/Excel)")
-            file_upload = st.file_uploader("Upload Excel", type=['xlsx', 'xls'])
-            if file_upload and st.button("Proses Upload"):
+            # --- FEATURE 1: TAMBAH PEGAWAI MANUAL ---
+            st.markdown("### ➕ Tambah Pegawai Manual")
+            with st.form("form_tambah_pegawai_manual"):
+                manual_nip = st.text_input("NIP Pegawai:", placeholder="Contoh: 198001012005011001")
+                manual_nama = st.text_input("Nama Pegawai:", placeholder="Contoh: Ahmad, S.Pd.")
+                
+                df_sch_opt = get_data_sekolah()
+                opsi_sekolah_peg = df_sch_opt['school_name'].tolist() if not df_sch_opt.empty else []
+                manual_sekolah = st.selectbox("Pilih Sekolah / Unit Kerja:", opsi_sekolah_peg if opsi_sekolah_peg else ["-"])
+                
+                submit_manual = st.form_submit_button("💾 Simpan Pegawai")
+                if submit_manual:
+                    if manual_nip.strip() and manual_nama.strip() and manual_sekolah != "-":
+                        try:
+                            supabase.table('pegawai').upsert({
+                                'nip': manual_nip.strip(),
+                                'name': manual_nama.strip(),
+                                'school_name': manual_sekolah.strip(),
+                                'photo_uploaded': False,
+                                'is_cadar': False
+                            }, on_conflict='nip').execute()
+                            st.success(f"✅ Pegawai {manual_nama} berhasil ditambahkan!")
+                            time.sleep(1)
+                            st.rerun()
+                        except Exception as e:
+                            st.error(f"Gagal menambahkan pegawai: {e}")
+                    else:
+                        st.error("⚠️ NIP, Nama, dan Sekolah wajib diisi!")
+
+            st.markdown("---")
+
+            # --- FEATURE 2: DOWNLOAD TEMPLATE & UPLOAD MASSAL ---
+            st.markdown("### 📥 Download Template & Upload Massal")
+            
+            # Generator File Template Excel
+            df_template = pd.DataFrame([
+                {"nip": "198001012005011001", "name": "Ahmad, S.Pd.", "school_name": "SMKN 6 WAJO"},
+                {"nip": "198502022008022002", "name": "Siti, M.Pd.", "school_name": "SMKN 6 WAJO"}
+            ])
+            buffer = io.BytesIO()
+            with pd.ExcelWriter(buffer, engine='openpyxl') as writer:
+                df_template.to_excel(writer, index=False, sheet_name='Template_Pegawai')
+            
+            st.download_button(
+                label="📥 Download Template Excel (.xlsx)",
+                data=buffer.getvalue(),
+                file_name="Template_Data_Pegawai.xlsx",
+                mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                key="dl_template_excel"
+            )
+
+            file_upload = st.file_uploader("Upload File Excel/CSV Data Pegawai", type=['xlsx', 'xls', 'csv'])
+            if file_upload and st.button("Proses Upload Massal"):
                 try:
-                    df_upload = pd.read_excel(file_upload, dtype=str).dropna(subset=['nip', 'name', 'school_name'], how='all')
-                    records = [{'nip': str(r['nip']).strip(), 'name': str(r['name']).strip(), 'school_name': str(r['school_name']).strip(), 'photo_uploaded': False, 'is_cadar': False} for _, r in df_upload.iterrows()]
-                    supabase.table('pegawai').upsert(records, on_conflict='nip').execute()
-                    st.success("✅ Berhasil upload pegawai!")
-                    st.rerun()
-                except Exception as e: st.error(f"Gagal: {e}")
+                    if file_upload.name.endswith('.csv'):
+                        df_upload = pd.read_csv(file_upload, dtype=str)
+                    else:
+                        df_upload = pd.read_excel(file_upload, dtype=str)
+                    
+                    df_upload = df_upload.dropna(subset=['nip', 'name', 'school_name'], how='all')
+                    
+                    records = []
+                    for _, r in df_upload.iterrows():
+                        nip_v = str(r['nip']).strip() if pd.notna(r.get('nip')) else ""
+                        name_v = str(r['name']).strip() if pd.notna(r.get('name')) else ""
+                        sch_v = str(r['school_name']).strip() if pd.notna(r.get('school_name')) else ""
+                        
+                        if nip_v and name_v and sch_v and nip_v.lower() != 'nan':
+                            records.append({
+                                'nip': nip_v,
+                                'name': name_v,
+                                'school_name': sch_v,
+                                'photo_uploaded': False,
+                                'is_cadar': False
+                            })
+                    
+                    if records:
+                        supabase.table('pegawai').upsert(records, on_conflict='nip').execute()
+                        st.success(f"✅ Berhasil mengunggah {len(records)} data pegawai!")
+                        time.sleep(1)
+                        st.rerun()
+                    else:
+                        st.warning("⚠️ File tidak berisi data pegawai yang valid.")
+                except Exception as e:
+                    st.error(f"Gagal memproses upload: {e}")
                 
             st.markdown("---")
+
+            # --- FEATURE 3: HAPUS PEGAWAI SPESIFIK ---
             st.markdown("### 🗑️ Hapus Data Pegawai Spesifik")
             hapus_nip = st.text_input("Masukkan NIP Pegawai yang ingin dihapus:")
             if st.button("Hapus Pegawai", type="primary"):
