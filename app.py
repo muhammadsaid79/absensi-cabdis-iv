@@ -621,8 +621,8 @@ elif st.session_state.role == "Admin":
                 
                 col_f_kiri, col_f_kanan = st.columns([1, 2])
                 with col_f_kiri:
-                    if is_uploaded and pd.notna(emp.get('photo_base64')) and emp['photo_base64']:
-                        st.image(emp['photo_base64'], caption=f"Foto {nama_peg}", use_container_width=True)
+                    if is_uploaded:
+                        st.success("📷 Foto acuan sudah terunggah dan dikunci dalam sistem.")
                     else:
                         st.info("📷 Belum ada foto acuan.")
                         
@@ -1069,6 +1069,12 @@ elif st.session_state.role == "Superadmin":
                     
                     with st.form("form_update_pegawai"):
                         st.info(f"Mengedit data untuk NIP: **{target_nip}**")
+                        
+                        current_photo_uploaded = str(emp_edit.get('photo_uploaded', 'False')).lower() == 'true'
+                        if current_photo_uploaded and pd.notna(emp_edit.get('photo_base64')) and emp_edit['photo_base64']:
+                            st.image(emp_edit['photo_base64'], caption=f"Foto {emp_edit.get('name', '')}", width=250)
+                        elif not current_photo_uploaded:
+                            st.info("📷 Pegawai ini belum memiliki foto acuan.")
                         
                         edit_nama = st.text_input("Nama Pegawai:", value=emp_edit.get('name', ''))
                         
