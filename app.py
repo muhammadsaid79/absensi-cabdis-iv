@@ -680,7 +680,7 @@ elif st.session_state.role == "Superadmin":
     
     # ------------------ PENAMBAHAN TAB REKAP DISINI ------------------
     tab1, tab_pc, tab2, tab3, tab4, tab5, tab6, tab_rekap = st.tabs([
-        "🏛️ Sekolah", "💻 PC", "👥 Pegawai", "🔑 Admin", "📝 Izin", "🚨 Database", "⚙️ Jam", "📈 Rekap"
+        "🏛️ Sekolah", "💻 PC", "👥 Pegawai", "🔑 Admin", "📝 Izin", "🚨 Database", "⚙️ Jam", "📈 Rekap", "🟥 LAPORAN INDISIPLINER PEGAWAI"
     ])
     
     with tab1:
@@ -850,29 +850,29 @@ elif st.session_state.role == "Superadmin":
             st.rerun()
 
   # ------------------------------------------
-    # TAB REKAP & LAPORAN INDISIPLINER (DIPISAH DENGAN SUB-TAB)
+    # 1. TAB REKAP ABSENSI
     # ------------------------------------------
     with tab_rekap:
-        st.markdown("### 📈 Rekap Absensi & Laporan Indisipliner Pegawai")
-        st.caption("Cari nama sekolah dan tentukan rentang bulan untuk menganalisis akumulasi kehadiran serta pelanggaran pegawai.")
+        st.markdown("### 📈 Rekap Absensi Keseluruhan Pegawai")
+        st.caption("Tarik rekap data absensi semua pegawai berdasarkan sekolah dan rentang waktu.")
 
-        with st.form("form_rekap_superadmin"):
-            sekolah_rekap = st.text_input("Masukkan Nama Sekolah yang Ingin Direkap:", placeholder="Contoh: SMAN 1 WAJO")
+        with st.form("form_rekap_absensi"):
+            sekolah_rekap = st.text_input("Masukkan Nama Sekolah:", placeholder="Contoh: SMAN 1 WAJO", key="input_sekolah_rekap")
 
             col_m1, col_y1, col_m2, col_y2 = st.columns(4)
             bulan_list = ["Januari", "Februari", "Maret", "April", "Mei", "Juni", "Juli", "Agustus", "September", "Oktober", "November", "Desember"]
             tahun_list = list(range(2024, 2031))
 
             with col_m1:
-                start_month = st.selectbox("Dari Bulan", bulan_list, index=7) # Default: Agustus
+                start_month = st.selectbox("Dari Bulan", bulan_list, index=7, key="sm_rekap")
             with col_y1:
-                start_year = st.selectbox("Tahun Mulai", tahun_list, index=2) # Default: 2026
+                start_year = st.selectbox("Tahun Mulai", tahun_list, index=2, key="sy_rekap")
             with col_m2:
-                end_month = st.selectbox("Sampai Bulan", bulan_list, index=11) # Default: Desember
+                end_month = st.selectbox("Sampai Bulan", bulan_list, index=11, key="em_rekap")
             with col_y2:
-                end_year = st.selectbox("Tahun Selesai", tahun_list, index=2) # Default: 2026
+                end_year = st.selectbox("Tahun Selesai", tahun_list, index=2, key="ey_rekap")
 
-            btn_rekap = st.form_submit_button("🔍 Cari Data")
+            btn_rekap = st.form_submit_button("🔍 Tampilkan Rekap")
 
         if btn_rekap:
             if not sekolah_rekap.strip():
@@ -883,93 +883,138 @@ elif st.session_state.role == "Superadmin":
                 last_day = calendar.monthrange(end_year, month_map[end_month])[1]
                 end_d = f"{end_year}-{month_map[end_month]:02d}-{last_day}"
                 
-                # Menghitung Total Hari Kerja Efektif (Asumsi Senin - Jumat)
                 rentang_tanggal = pd.date_range(start=start_d, end=end_d)
                 total_hari_kerja = len(rentang_tanggal[rentang_tanggal.dayofweek < 5])
 
                 try:
-                    res_pegawai_rekap = supabase.table('pegawai').select('nip, name, school_name').ilike('school_name', f"%{sekolah_rekap.strip()}%").execute()
-                    df_pegawai_rekap = pd.DataFrame(res_pegawai_rekap.data) if res_pegawai_rekap.data else pd.DataFrame()
+                    res_pegawai = supabase.table('pegawai').select('nip, name, school_name').ilike('school_name', f"%{sekolah_rekap.strip()}%").execute()
+                    df_pegawai = pd.DataFrame(res_pegawai.data) if res_pegawai.data else pd.DataFrame()
 
-                    if df_pegawai_rekap.empty:
-                        st.info(f"Tidak ada pegawai ditemukan untuk pencarian sekolah: **{sekolah_rekap}**")
+                    if df_pegawai.empty:
+                        st.info(f"Tidak ada pegawai ditemukan di: **{sekolah_rekap}**")
                     else:
-                        res_absen_rekap = supabase.table('absensi').select('nip, status, tanggal').ilike('sekolah', f"%{sekolah_rekap.strip()}%").gte('tanggal', start_d).lte('tanggal', end_d).execute()
-                        df_absen_rekap = pd.DataFrame(res_absen_rekap.data) if res_absen_rekap.data else pd.DataFrame()
+                        res_absen = supabase.table('absensi').select('nip, status, tanggal').ilike('sekolah', f"%{sekolah_rekap.strip()}%").gte('tanggal', start_d).lte('tanggal', end_d).execute()
+                        df_absen = pd.DataFrame(res_absen.data) if res_absen.data else pd.DataFrame()
 
                         rekap_data = []
-                        for _, emp in df_pegawai_rekap.iterrows():
-                            emp_nip = emp['nip']
-                            emp_name = emp['name']
+                        for _, emp in df_pegawai.iterrows():
+                            emp_nip, emp_name = emp['nip'], emp['name']
 
-                            if not df_absen_rekap.empty:
-                                df_emp_absen = df_absen_rekap[df_absen_rekap['nip'] == emp_nip]
-                                total_masuk = df_emp_absen['status'].str.contains('Masuk', case=False, na=False).sum()
-                                total_pulang = df_emp_absen['status'].str.contains('Pulang', case=False, na=False).sum()
-                                total_terlambat = df_emp_absen['status'].str.contains('TERLAMBAT', case=False, na=False).sum()
-                                total_izin = df_emp_absen['status'].str.contains('Izin', case=False, na=False).sum()
+                            if not df_absen.empty:
+                                df_emp_absen = df_absen[df_absen['nip'] == emp_nip]
+                                t_masuk = df_emp_absen['status'].str.contains('Masuk', case=False, na=False).sum()
+                                t_pulang = df_emp_absen['status'].str.contains('Pulang', case=False, na=False).sum()
+                                t_terlambat = df_emp_absen['status'].str.contains('TERLAMBAT', case=False, na=False).sum()
+                                t_izin = df_emp_absen['status'].str.contains('Izin', case=False, na=False).sum()
                                 hari_ada_catatan = df_emp_absen['tanggal'].nunique()
                             else:
-                                total_masuk, total_pulang, total_terlambat, total_izin, hari_ada_catatan = 0, 0, 0, 0, 0
+                                t_masuk, t_pulang, t_terlambat, t_izin, hari_ada_catatan = 0, 0, 0, 0, 0
 
-                            tanpa_keterangan = max(0, total_hari_kerja - hari_ada_catatan)
+                            alpha = max(0, total_hari_kerja - hari_ada_catatan)
 
                             rekap_data.append({
-                                'NIP': emp_nip,
-                                'Nama Pegawai': emp_name,
-                                'Total Absen Masuk': total_masuk,
-                                'Total Absen Pulang': total_pulang,
-                                'Total Terlambat': total_terlambat,
-                                'Total Izin/Manual': total_izin,
-                                'Tanpa Keterangan (Alpha)': tanpa_keterangan
+                                'NIP': emp_nip, 'Nama Pegawai': emp_name,
+                                'Total Absen Masuk': t_masuk, 'Total Absen Pulang': t_pulang,
+                                'Total Terlambat': t_terlambat, 'Total Izin/Manual': t_izin,
+                                'Tanpa Keterangan (Alpha)': alpha
                             })
 
-                        df_rekap_final = pd.DataFrame(rekap_data)
-                        df_indisipliner = df_rekap_final[df_rekap_final['Tanpa Keterangan (Alpha)'] >= 1].copy()
+                        df_final = pd.DataFrame(rekap_data)
+                        st.success(f"✅ Data berhasil ditarik. Total Hari Kerja: **{total_hari_kerja} Hari**")
+                        st.dataframe(df_final, use_container_width=True)
 
-                        st.success(f"✅ Data berhasil ditarik untuk periode: **{start_month} {start_year} s/d {end_month} {end_year}**")
-                        st.info(f"📅 Total Hari Kerja Efektif (Senin-Jumat): **{total_hari_kerja} Hari**")
-
-                        # ==========================================
-                        # PEMBUATAN SUB-TABS UNTUK MEMISAHKAN VIEW
-                        # ==========================================
-                        subtab_rekap, subtab_indisipliner = st.tabs(["📊 Rekap Absensi Keseluruhan", "🚨 Laporan Indisipliner"])
-
-                        # --- SUB-TAB 1: REKAP KESELURUHAN ---
-                        with subtab_rekap:
-                            st.markdown("### 📊 Data Kehadiran Seluruh Pegawai")
-                            st.dataframe(df_rekap_final, use_container_width=True)
-
-                            csv_data = df_rekap_final.to_csv(index=False).encode('utf-8')
-                            st.download_button(
-                                label="📥 Download Rekap Keseluruhan (CSV)",
-                                data=csv_data,
-                                file_name=f"Rekap_Lengkap_{sekolah_rekap.replace(' ', '_')}_{start_month}{start_year}-{end_month}{end_year}.csv",
-                                mime="text/csv",
-                                key="dl_semua_rekap"
-                            )
-
-                        # --- SUB-TAB 2: LAPORAN INDISIPLINER ---
-                        with subtab_indisipliner:
-                            st.markdown("### 🚨 Data Pegawai Indisipliner (Tanpa Keterangan ≥ 1 Hari)")
-                            
-                            if df_indisipliner.empty:
-                                st.success("🎉 **SANGAT BAIK:** Tidak ditemukan pegawai indisipliner (semua pegawai hadir/memiliki keterangan penuh pada rentang waktu ini).")
-                            else:
-                                st.error(f"⚠️ Ditemukan **{len(df_indisipliner)} Pegawai** yang memiliki catatan Tanpa Keterangan (Alpha) ≥ 1 hari!")
-                                st.dataframe(
-                                    df_indisipliner[['NIP', 'Nama Pegawai', 'Tanpa Keterangan (Alpha)', 'Total Terlambat', 'Total Izin/Manual']], 
-                                    use_container_width=True
-                                )
-                                
-                                csv_indisipliner = df_indisipliner.to_csv(index=False).encode('utf-8')
-                                st.download_button(
-                                    label="📥 Download Laporan Indisipliner (CSV)",
-                                    data=csv_indisipliner,
-                                    file_name=f"Laporan_Indisipliner_{sekolah_rekap.replace(' ', '_')}_{start_month}{start_year}-{end_month}{end_year}.csv",
-                                    mime="text/csv",
-                                    key="dl_indisipliner"
-                                )
-
+                        csv_data = df_final.to_csv(index=False).encode('utf-8')
+                        st.download_button(
+                            label="📥 Download Rekap (CSV)",
+                            data=csv_data,
+                            file_name=f"Rekap_{sekolah_rekap}_{start_month}{start_year}-{end_month}{end_year}.csv",
+                            mime="text/csv", key="dl_rekap_main"
+                        )
                 except Exception as e:
-                    st.error(f"Terjadi kesalahan saat menarik data: {e}")
+                    st.error(f"Terjadi kesalahan: {e}")
+
+    # ------------------------------------------
+    # 2. TAB LAPORAN INDISIPLINER
+    # ------------------------------------------
+    with tab_indisipliner:
+        st.markdown("### 🟥 Laporan Indisipliner Pegawai (Tanpa Keterangan)")
+        st.caption("Khusus menyaring pegawai yang memiliki catatan Tanpa Keterangan (Alpha) 1 hari atau lebih.")
+
+        with st.form("form_indisipliner"):
+            sekolah_indi = st.text_input("Masukkan Nama Sekolah:", placeholder="Contoh: SMAN 1 WAJO", key="input_sekolah_indi")
+
+            col_m1, col_y1, col_m2, col_y2 = st.columns(4)
+            with col_m1:
+                start_month_i = st.selectbox("Dari Bulan", bulan_list, index=7, key="sm_indi")
+            with col_y1:
+                start_year_i = st.selectbox("Tahun Mulai", tahun_list, index=2, key="sy_indi")
+            with col_m2:
+                end_month_i = st.selectbox("Sampai Bulan", bulan_list, index=11, key="em_indi")
+            with col_y2:
+                end_year_i = st.selectbox("Tahun Selesai", tahun_list, index=2, key="ey_indi")
+
+            btn_indi = st.form_submit_button("🚨 Tampilkan Laporan Indisipliner")
+
+        if btn_indi:
+            if not sekolah_indi.strip():
+                st.warning("Silakan masukkan nama sekolah terlebih dahulu.")
+            else:
+                month_map = {m: i+1 for i, m in enumerate(bulan_list)}
+                start_d = f"{start_year_i}-{month_map[start_month_i]:02d}-01"
+                last_day = calendar.monthrange(end_year_i, month_map[end_month_i])[1]
+                end_d = f"{end_year_i}-{month_map[end_month_i]:02d}-{last_day}"
+                
+                rentang_tanggal = pd.date_range(start=start_d, end=end_d)
+                total_hari_kerja = len(rentang_tanggal[rentang_tanggal.dayofweek < 5])
+
+                try:
+                    res_pegawai = supabase.table('pegawai').select('nip, name, school_name').ilike('school_name', f"%{sekolah_indi.strip()}%").execute()
+                    df_pegawai = pd.DataFrame(res_pegawai.data) if res_pegawai.data else pd.DataFrame()
+
+                    if df_pegawai.empty:
+                        st.info(f"Tidak ada pegawai ditemukan di: **{sekolah_indi}**")
+                    else:
+                        res_absen = supabase.table('absensi').select('nip, status, tanggal').ilike('sekolah', f"%{sekolah_indi.strip()}%").gte('tanggal', start_d).lte('tanggal', end_d).execute()
+                        df_absen = pd.DataFrame(res_absen.data) if res_absen.data else pd.DataFrame()
+
+                        rekap_data = []
+                        for _, emp in df_pegawai.iterrows():
+                            emp_nip, emp_name = emp['nip'], emp['name']
+
+                            if not df_absen.empty:
+                                df_emp_absen = df_absen[df_absen['nip'] == emp_nip]
+                                hari_ada_catatan = df_emp_absen['tanggal'].nunique()
+                            else:
+                                hari_ada_catatan = 0
+
+                            alpha = max(0, total_hari_kerja - hari_ada_catatan)
+
+                            # Hanya masukkan ke data jika ada pelanggaran (Alpha >= 1)
+                            if alpha >= 1:
+                                t_terlambat = df_emp_absen['status'].str.contains('TERLAMBAT', case=False, na=False).sum() if not df_absen.empty else 0
+                                t_izin = df_emp_absen['status'].str.contains('Izin', case=False, na=False).sum() if not df_absen.empty else 0
+                                
+                                rekap_data.append({
+                                    'NIP': emp_nip, 'Nama Pegawai': emp_name,
+                                    'Tanpa Keterangan (Alpha)': alpha,
+                                    'Total Terlambat': t_terlambat,
+                                    'Total Izin/Manual': t_izin
+                                })
+
+                        df_indisipliner = pd.DataFrame(rekap_data)
+
+                        if df_indisipliner.empty:
+                            st.success("🎉 **SANGAT BAIK:** Tidak ditemukan pegawai indisipliner pada periode ini.")
+                        else:
+                            st.error(f"⚠️ Ditemukan **{len(df_indisipliner)} Pegawai** dengan catatan Tanpa Keterangan (Alpha) ≥ 1 hari!")
+                            st.dataframe(df_indisipliner, use_container_width=True)
+                            
+                            csv_indi = df_indisipliner.to_csv(index=False).encode('utf-8')
+                            st.download_button(
+                                label="📥 Download Laporan Indisipliner (CSV)",
+                                data=csv_indi,
+                                file_name=f"Indisipliner_{sekolah_indi}_{start_month_i}{start_year_i}-{end_month_i}{end_year_i}.csv",
+                                mime="text/csv", key="dl_indi_main"
+                            )
+                except Exception as e:
+                    st.error(f"Terjadi kesalahan: {e}")
