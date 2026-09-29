@@ -679,7 +679,7 @@ elif st.session_state.role == "Superadmin":
     col_tombol.button("🚪 Logout", on_click=logout, use_container_width=True)
     
     # ------------------ PENAMBAHAN TAB REKAP DISINI ------------------
-    tab1, tab_pc, tab2, tab3, tab4, tab5, tab6, tab_rekap = st.tabs([
+    tab1, tab_pc, tab2, tab3, tab4, tab5, tab6, tab_rekap, tab_indisipliner = st.tabs([
         "🏛️ Sekolah", "💻 PC", "👥 Pegawai", "🔑 Admin", "📝 Izin", "🚨 Database", "⚙️ Jam", "📈 Rekap", "🟥 LAPORAN INDISIPLINER PEGAWAI"
     ])
     
