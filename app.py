@@ -519,7 +519,7 @@ elif st.session_state.role == "Admin":
         st.markdown("##### 📋 Daftar PC Resmi Terdaftar")
         if list_pc:
             for idx_p, r_pc in enumerate(list_pc, 1):
-                st.write(f"{idx_p}. 🖥️ **{r_pc['device_name']}** — 🔒 Terkunci Permanen")
+                st.write(f"{idx_p}. 🖥️️ **{r_pc['device_name']}** — 🔒 Terkunci Permanen")
         else:
             st.info("Belum ada PC terdaftar untuk sekolah ini.")
 
@@ -678,7 +678,10 @@ elif st.session_state.role == "Superadmin":
     col_judul.title("🛠️ Dashboard Superadmin")
     col_tombol.button("🚪 Logout", on_click=logout, use_container_width=True)
     
-    tab1, tab_pc, tab2, tab3, tab4, tab5, tab6 = st.tabs(["🏛️ Sekolah", "💻 PC", "👥 Pegawai", "🔑 Admin", "📝 Izin", "🚨 Database", "⚙️ Jam"])
+    # ------------------ PENAMBAHAN TAB REKAP DISINI ------------------
+    tab1, tab_pc, tab2, tab3, tab4, tab5, tab6, tab_rekap = st.tabs([
+        "🏛️ Sekolah", "💻 PC", "👥 Pegawai", "🔑 Admin", "📝 Izin", "🚨 Database", "⚙️ Jam", "📈 Rekap"
+    ])
     
     with tab1:
         st.markdown("### Sekolah Aktif")
@@ -845,3 +848,104 @@ elif st.session_state.role == "Superadmin":
             supabase.table('pengaturan').update({'batas_masuk': n_in.strftime('%H:%M'), 'batas_pulang': n_out.strftime('%H:%M')}).neq('batas_masuk', '').execute()
             st.session_state.settings = get_data_pengaturan()
             st.rerun()
+
+    # ------------------------------------------
+    # TAB REKAP (FITUR BARU + TANPA KETERANGAN)
+    # ------------------------------------------
+    with tab_rekap:
+        st.markdown("### 📈 Rekap Absensi Pegawai")
+        st.caption("Cari nama sekolah dan tentukan rentang bulan untuk melihat akumulasi absensi pegawai.")
+
+        with st.form("form_rekap_superadmin"):
+            sekolah_rekap = st.text_input("Masukkan Nama Sekolah yang Ingin Direkap:", placeholder="Contoh: SMAN 1 WAJO")
+
+            col_m1, col_y1, col_m2, col_y2 = st.columns(4)
+            bulan_list = ["Januari", "Februari", "Maret", "April", "Mei", "Juni", "Juli", "Agustus", "September", "Oktober", "November", "Desember"]
+            tahun_list = list(range(2024, 2031))
+
+            with col_m1:
+                start_month = st.selectbox("Dari Bulan", bulan_list, index=7) # Default: Agustus
+            with col_y1:
+                start_year = st.selectbox("Tahun Mulai", tahun_list, index=2) # Default: 2026
+            with col_m2:
+                end_month = st.selectbox("Sampai Bulan", bulan_list, index=11) # Default: Desember
+            with col_y2:
+                end_year = st.selectbox("Tahun Selesai", tahun_list, index=2) # Default: 2026
+
+            btn_rekap = st.form_submit_button("🔍 Tampilkan Rekap")
+
+        if btn_rekap:
+            if not sekolah_rekap.strip():
+                st.warning("Silakan masukkan nama sekolah terlebih dahulu.")
+            else:
+                month_map = {m: i+1 for i, m in enumerate(bulan_list)}
+                start_d = f"{start_year}-{month_map[start_month]:02d}-01"
+                last_day = calendar.monthrange(end_year, month_map[end_month])[1]
+                end_d = f"{end_year}-{month_map[end_month]:02d}-{last_day}"
+                
+                # Menghitung Total Hari Kerja (Asumsi Senin - Jumat)
+                rentang_tanggal = pd.date_range(start=start_d, end=end_d)
+                # dayofweek: 0=Senin, 1=Selasa, ..., 4=Jumat. Jadi < 5 adalah Senin-Jumat
+                total_hari_kerja = len(rentang_tanggal[rentang_tanggal.dayofweek < 5])
+
+                try:
+                    res_pegawai_rekap = supabase.table('pegawai').select('nip, name, school_name').ilike('school_name', f"%{sekolah_rekap.strip()}%").execute()
+                    df_pegawai_rekap = pd.DataFrame(res_pegawai_rekap.data) if res_pegawai_rekap.data else pd.DataFrame()
+
+                    if df_pegawai_rekap.empty:
+                        st.info(f"Tidak ada pegawai ditemukan untuk pencarian sekolah: **{sekolah_rekap}**")
+                    else:
+                        res_absen_rekap = supabase.table('absensi').select('nip, status, tanggal').ilike('sekolah', f"%{sekolah_rekap.strip()}%").gte('tanggal', start_d).lte('tanggal', end_d).execute()
+                        df_absen_rekap = pd.DataFrame(res_absen_rekap.data) if res_absen_rekap.data else pd.DataFrame()
+
+                        rekap_data = []
+                        for _, emp in df_pegawai_rekap.iterrows():
+                            emp_nip = emp['nip']
+                            emp_name = emp['name']
+
+                            if not df_absen_rekap.empty:
+                                df_emp_absen = df_absen_rekap[df_absen_rekap['nip'] == emp_nip]
+                                
+                                # Hitung total aksi
+                                total_masuk = df_emp_absen['status'].str.contains('Masuk', case=False, na=False).sum()
+                                total_pulang = df_emp_absen['status'].str.contains('Pulang', case=False, na=False).sum()
+                                total_terlambat = df_emp_absen['status'].str.contains('TERLAMBAT', case=False, na=False).sum()
+                                total_izin = df_emp_absen['status'].str.contains('Izin', case=False, na=False).sum()
+                                
+                                # Hitung hari di mana pegawai hadir (minimal absen masuk atau pulang) atau izin
+                                # Menghindari hitungan ganda jika di hari yang sama dia absen masuk DAN pulang
+                                hari_ada_catatan = df_emp_absen['tanggal'].nunique()
+                            else:
+                                total_masuk, total_pulang, total_terlambat, total_izin, hari_ada_catatan = 0, 0, 0, 0, 0
+
+                            # Hitung Tanpa Keterangan
+                            # Jika hasil pengurangannya minus (misal pegawai absen di hari Sabtu/Minggu), set jadi 0
+                            tanpa_keterangan = max(0, total_hari_kerja - hari_ada_catatan)
+
+                            rekap_data.append({
+                                'NIP': emp_nip,
+                                'Nama Pegawai': emp_name,
+                                'Total Absen Masuk': total_masuk,
+                                'Total Absen Pulang': total_pulang,
+                                'Total Terlambat': total_terlambat,
+                                'Total Izin/Manual': total_izin,
+                                'Tanpa Keterangan (Alpha)': tanpa_keterangan
+                            })
+
+                        df_rekap_final = pd.DataFrame(rekap_data)
+                        
+                        st.success(f"✅ Rekap ditemukan untuk periode {start_month} {start_year} - {end_month} {end_year}")
+                        st.info(f"📅 Asumsi Total Hari Kerja (Senin-Jumat) pada rentang ini: **{total_hari_kerja} hari**")
+                        st.dataframe(df_rekap_final, use_container_width=True)
+
+                        # Menyediakan fitur Download Excel/CSV
+                        csv_data = df_rekap_final.to_csv(index=False).encode('utf-8')
+                        st.download_button(
+                            label="📥 Download Excel/CSV",
+                            data=csv_data,
+                            file_name=f"Rekap_{sekolah_rekap}_{start_month}{start_year}-{end_month}{end_year}.csv",
+                            mime="text/csv",
+                        )
+
+                except Exception as e:
+                    st.error(f"Terjadi kesalahan saat menarik data rekap: {e}")
