@@ -80,7 +80,7 @@ def tampilkan_peringatan_csv():
 # --- DIALOG PERINGATAN PENDAFTARAN PC BARU ---
 @st.dialog("⚠️ Peringatan Pendaftaran PC!")
 def konfirmasi_pendaftaran_pc(nama_pc, admin_sekolah):
-    st.warning("MAX HANYA 3 PC! PASTIKAN SUDAH MELAPORKAN KE ADMIN CABDIS (MOCHD GHAZALI/JEDDAH/GAZA) SEBELUM MENDAFTARKAN PC.")
+    st.warning("MAX HANYA 3 PC! PASTIKAN SUDAH MELAPORKAN KE ADMIN CABDIS (MOCHD GHAZALI/JEDDAH/GAZA) SEBELUM MENDAFTARKAN PC (ADMIN CABDIS BERHAK MENGHAPUS PC YANG TIDAK DIKERAHUI).")
     st.write(f"Apakah Anda yakin ingin mendaftarkan **{nama_pc}**?")
     
     col_ya, col_batal = st.columns(2)
