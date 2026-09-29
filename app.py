@@ -120,7 +120,7 @@ def verify_and_get_role(token: str):
     if hmac.compare_digest(client_signature, expected_signature):
         return role_name
     return None
-    
+
 # --- 2. KONFIGURASI HALAMAN & COOKIE ---
 st.set_page_config(page_title="Sistem Absensi Sekolah Cabdis Wil IV", page_icon="🏫", layout="centered")
 cookie_manager = stx.CookieManager(key="cookie_manager_utama")
@@ -147,23 +147,14 @@ st.markdown("""
     </style>
 """, unsafe_allow_html=True)
 
-# --- 4. FUNGSI INTERAKSI DATABASE ---
+# --- 4. FUNGSI INTERAKSI DATABASE (OPTIMASI CACHING UNTUK MENGHEMAT EGRESS) ---
+@st.cache_data(ttl=600)
 def get_data_sekolah():
     try:
         res = supabase.table('sekolah').select('school_name, lat, lng, radius_m').execute()
         if res.data: return pd.DataFrame(res.data)
     except: pass
     return pd.DataFrame(columns=['school_name', 'lat', 'lng', 'radius_m'])
-
-def get_data_pegawai():
-    try:
-        res = supabase.table('pegawai').select('nip, name, school_name, photo_uploaded, is_cadar').execute()
-        if res.data:
-            df = pd.DataFrame(res.data)
-            df['nip'] = df['nip'].astype(str)
-            return df
-    except: pass
-    return pd.DataFrame(columns=['nip', 'name', 'school_name', 'photo_uploaded', 'is_cadar'])
 
 def get_data_admin():
     try:
@@ -172,6 +163,7 @@ def get_data_admin():
     except: pass
     return pd.DataFrame(columns=['id', 'username', 'password', 'sekolah'])
 
+@st.cache_data(ttl=600)
 def get_data_pengaturan():
     try:
         res = supabase.table('pengaturan').select('batas_masuk, batas_pulang').execute()
@@ -183,6 +175,50 @@ def get_data_pengaturan():
             return pd.DataFrame([default_data])
     except:
         return pd.DataFrame([{'batas_masuk': '07:30', 'batas_pulang': '16:00'}])
+
+# Helper Rekap Absensi untuk Menghindari Duplikasi Kode
+def proses_rekap_absensi(nama_sekolah, start_month, start_year, end_month, end_year, bulan_list):
+    month_map = {m: i+1 for i, m in enumerate(bulan_list)}
+    start_d = f"{start_year}-{month_map[start_month]:02d}-01"
+    last_day = calendar.monthrange(end_year, month_map[end_month])[1]
+    end_d = f"{end_year}-{month_map[end_month]:02d}-{last_day}"
+    
+    rentang_tanggal = pd.date_range(start=start_d, end=end_d)
+    total_hari_kerja = len(rentang_tanggal[rentang_tanggal.dayofweek < 5])
+
+    res_pegawai = supabase.table('pegawai').select('nip, name, school_name').ilike('school_name', f"%{nama_sekolah.strip()}%").execute()
+    df_pegawai = pd.DataFrame(res_pegawai.data) if res_pegawai.data else pd.DataFrame()
+
+    if df_pegawai.empty:
+        return None, total_hari_kerja
+
+    res_absen = supabase.table('absensi').select('nip, status, tanggal').ilike('sekolah', f"%{nama_sekolah.strip()}%").gte('tanggal', start_d).lte('tanggal', end_d).execute()
+    df_absen = pd.DataFrame(res_absen.data) if res_absen.data else pd.DataFrame()
+
+    rekap_data = []
+    for _, emp in df_pegawai.iterrows():
+        emp_nip, emp_name = emp['nip'], emp['name']
+
+        if not df_absen.empty:
+            df_emp_absen = df_absen[df_absen['nip'] == emp_nip]
+            t_masuk = df_emp_absen['status'].str.contains('Masuk', case=False, na=False).sum()
+            t_pulang = df_emp_absen['status'].str.contains('Pulang', case=False, na=False).sum()
+            t_terlambat = df_emp_absen['status'].str.contains('TERLAMBAT', case=False, na=False).sum()
+            t_izin = df_emp_absen['status'].str.contains('Izin', case=False, na=False).sum()
+            hari_ada_catatan = df_emp_absen['tanggal'].nunique()
+        else:
+            t_masuk, t_pulang, t_terlambat, t_izin, hari_ada_catatan = 0, 0, 0, 0, 0
+
+        alpha = max(0, total_hari_kerja - hari_ada_catatan)
+
+        rekap_data.append({
+            'NIP': emp_nip, 'Nama Pegawai': emp_name,
+            'Total Absen Masuk': t_masuk, 'Total Absen Pulang': t_pulang,
+            'Total Terlambat': t_terlambat, 'Total Izin/Manual': t_izin,
+            'Tanpa Keterangan (Alpha)': alpha
+        })
+
+    return pd.DataFrame(rekap_data), total_hari_kerja
 
 # --- 5. INISIALISASI SESSION STATE ---
 for key_state, val in {
@@ -197,10 +233,6 @@ for key_state, val in {
     'menu_unlocked': False
 }.items():
     if key_state not in st.session_state: st.session_state[key_state] = val
-
-if 'schools' not in st.session_state: st.session_state.schools = get_data_sekolah()
-if 'employees' not in st.session_state: st.session_state.employees = get_data_pegawai()
-if 'settings' not in st.session_state: st.session_state.settings = get_data_pengaturan()
 
 raw_token = cookie_manager.get("auth_token")
 saved_admin_school = cookie_manager.get("admin_sekolah")
@@ -317,7 +349,9 @@ if st.session_state.role == "Pegawai":
             st.warning("⚠️ Data pegawai tidak ditemukan.")
         else:
             emp_data = df_kandidat.iloc[0]
-            try: sch_data = st.session_state.schools[st.session_state.schools['school_name'] == emp_data['school_name']].iloc[0]
+            df_sekolah = get_data_sekolah()
+            try: 
+                sch_data = df_sekolah[df_sekolah['school_name'] == emp_data['school_name']].iloc[0]
             except:
                 st.error("Data sekolah untuk pegawai ini tidak ditemukan.")
                 st.stop()
@@ -435,9 +469,10 @@ if st.session_state.role == "Pegawai":
                                         st.warning(f"⚠️ Anda sudah absen **{jenis_aksi}** hari ini!")
                                     else:
                                         jam_sekarang = now.time()
+                                        df_settings = get_data_pengaturan()
                                         try:
-                                            b_masuk_str = st.session_state.settings['batas_masuk'].iloc[0] if not st.session_state.settings.empty else '07:30'
-                                            b_pulang_str = st.session_state.settings['batas_pulang'].iloc[0] if not st.session_state.settings.empty else '16:00'
+                                            b_masuk_str = df_settings['batas_masuk'].iloc[0] if not df_settings.empty else '07:30'
+                                            b_pulang_str = df_settings['batas_pulang'].iloc[0] if not df_settings.empty else '16:00'
                                             batas_masuk_obj = datetime.datetime.strptime(b_masuk_str, '%H:%M').time()
                                             batas_pulang_obj = datetime.datetime.strptime(b_pulang_str, '%H:%M').time()
                                         except:
@@ -603,7 +638,6 @@ elif st.session_state.role == "Admin":
                             url_foto = upload_ke_supabase(file_bytes, f"foto_acuan/{nip_peg}.jpg", "image/jpeg")
                             if url_foto:
                                 supabase.table('pegawai').update({'photo_uploaded': True, 'photo_base64': url_foto}).eq('nip', nip_peg).execute()
-                                st.session_state.employees = get_data_pegawai()
                                 st.success("✅ Foto acuan berhasil disimpan!")
                                 time.sleep(1)
                                 st.rerun()
@@ -737,48 +771,11 @@ elif st.session_state.role == "Superadmin":
             if not sekolah_rekap.strip():
                 st.warning("Silakan masukkan nama sekolah terlebih dahulu.")
             else:
-                month_map = {m: i+1 for i, m in enumerate(bulan_list)}
-                start_d = f"{start_year}-{month_map[start_month]:02d}-01"
-                last_day = calendar.monthrange(end_year, month_map[end_month])[1]
-                end_d = f"{end_year}-{month_map[end_month]:02d}-{last_day}"
-                
-                rentang_tanggal = pd.date_range(start=start_d, end=end_d)
-                total_hari_kerja = len(rentang_tanggal[rentang_tanggal.dayofweek < 5])
-
                 try:
-                    res_pegawai = supabase.table('pegawai').select('nip, name, school_name').ilike('school_name', f"%{sekolah_rekap.strip()}%").execute()
-                    df_pegawai = pd.DataFrame(res_pegawai.data) if res_pegawai.data else pd.DataFrame()
-
-                    if df_pegawai.empty:
+                    df_final, total_hari_kerja = proses_rekap_absensi(sekolah_rekap, start_month, start_year, end_month, end_year, bulan_list)
+                    if df_final is None or df_final.empty:
                         st.info(f"Tidak ada pegawai ditemukan di: **{sekolah_rekap}**")
                     else:
-                        res_absen = supabase.table('absensi').select('nip, status, tanggal').ilike('sekolah', f"%{sekolah_rekap.strip()}%").gte('tanggal', start_d).lte('tanggal', end_d).execute()
-                        df_absen = pd.DataFrame(res_absen.data) if res_absen.data else pd.DataFrame()
-
-                        rekap_data = []
-                        for _, emp in df_pegawai.iterrows():
-                            emp_nip, emp_name = emp['nip'], emp['name']
-
-                            if not df_absen.empty:
-                                df_emp_absen = df_absen[df_absen['nip'] == emp_nip]
-                                t_masuk = df_emp_absen['status'].str.contains('Masuk', case=False, na=False).sum()
-                                t_pulang = df_emp_absen['status'].str.contains('Pulang', case=False, na=False).sum()
-                                t_terlambat = df_emp_absen['status'].str.contains('TERLAMBAT', case=False, na=False).sum()
-                                t_izin = df_emp_absen['status'].str.contains('Izin', case=False, na=False).sum()
-                                hari_ada_catatan = df_emp_absen['tanggal'].nunique()
-                            else:
-                                t_masuk, t_pulang, t_terlambat, t_izin, hari_ada_catatan = 0, 0, 0, 0, 0
-
-                            alpha = max(0, total_hari_kerja - hari_ada_catatan)
-
-                            rekap_data.append({
-                                'NIP': emp_nip, 'Nama Pegawai': emp_name,
-                                'Total Absen Masuk': t_masuk, 'Total Absen Pulang': t_pulang,
-                                'Total Terlambat': t_terlambat, 'Total Izin/Manual': t_izin,
-                                'Tanpa Keterangan (Alpha)': alpha
-                            })
-
-                        df_final = pd.DataFrame(rekap_data)
                         st.success(f"✅ Data berhasil ditarik. Total Hari Kerja: **{total_hari_kerja} Hari**")
                         st.dataframe(df_final, use_container_width=True)
 
@@ -821,48 +818,12 @@ elif st.session_state.role == "Superadmin":
             if not sekolah_indi.strip():
                 st.warning("Silakan masukkan nama sekolah terlebih dahulu.")
             else:
-                month_map = {m: i+1 for i, m in enumerate(bulan_list)}
-                start_d = f"{start_year_i}-{month_map[start_month_i]:02d}-01"
-                last_day = calendar.monthrange(end_year_i, month_map[end_month_i])[1]
-                end_d = f"{end_year_i}-{month_map[end_month_i]:02d}-{last_day}"
-                
-                rentang_tanggal = pd.date_range(start=start_d, end=end_d)
-                total_hari_kerja = len(rentang_tanggal[rentang_tanggal.dayofweek < 5])
-
                 try:
-                    res_pegawai = supabase.table('pegawai').select('nip, name, school_name').ilike('school_name', f"%{sekolah_indi.strip()}%").execute()
-                    df_pegawai = pd.DataFrame(res_pegawai.data) if res_pegawai.data else pd.DataFrame()
-
-                    if df_pegawai.empty:
+                    df_res, _ = proses_rekap_absensi(sekolah_indi, start_month_i, start_year_i, end_month_i, end_year_i, bulan_list)
+                    if df_res is None or df_res.empty:
                         st.info(f"Tidak ada pegawai ditemukan di: **{sekolah_indi}**")
                     else:
-                        res_absen = supabase.table('absensi').select('nip, status, tanggal').ilike('sekolah', f"%{sekolah_indi.strip()}%").gte('tanggal', start_d).lte('tanggal', end_d).execute()
-                        df_absen = pd.DataFrame(res_absen.data) if res_absen.data else pd.DataFrame()
-
-                        rekap_data = []
-                        for _, emp in df_pegawai.iterrows():
-                            emp_nip, emp_name = emp['nip'], emp['name']
-
-                            if not df_absen.empty:
-                                df_emp_absen = df_absen[df_absen['nip'] == emp_nip]
-                                hari_ada_catatan = df_emp_absen['tanggal'].nunique()
-                            else:
-                                hari_ada_catatan = 0
-
-                            alpha = max(0, total_hari_kerja - hari_ada_catatan)
-
-                            if alpha >= 1:
-                                t_terlambat = df_emp_absen['status'].str.contains('TERLAMBAT', case=False, na=False).sum() if not df_absen.empty else 0
-                                t_izin = df_emp_absen['status'].str.contains('Izin', case=False, na=False).sum() if not df_absen.empty else 0
-                                
-                                rekap_data.append({
-                                    'NIP': emp_nip, 'Nama Pegawai': emp_name,
-                                    'Tanpa Keterangan (Alpha)': alpha,
-                                    'Total Terlambat': t_terlambat,
-                                    'Total Izin/Manual': t_izin
-                                })
-
-                        df_indisipliner = pd.DataFrame(rekap_data)
+                        df_indisipliner = df_res[df_res['Tanpa Keterangan (Alpha)'] >= 1]
 
                         if df_indisipliner.empty:
                             st.success("🎉 **SANGAT BAIK:** Tidak ditemukan pegawai indisipliner pada periode ini.")
@@ -892,7 +853,8 @@ elif st.session_state.role == "Superadmin":
             tampilkan_form_kunci("Sekolah")
         else:
             st.markdown("### Sekolah Aktif")
-            edited_schools = st.data_editor(st.session_state.schools, num_rows="dynamic", use_container_width=True)
+            df_sekolah_curr = get_data_sekolah()
+            edited_schools = st.data_editor(df_sekolah_curr, num_rows="dynamic", use_container_width=True)
             if st.button("💾 Simpan Perubahan Sekolah", type="primary"):
                 try:
                     df_clean = edited_schools.copy()
@@ -917,7 +879,7 @@ elif st.session_state.role == "Superadmin":
                             })
                         
                         supabase.table('sekolah').upsert(records).execute()
-                        st.session_state.schools = get_data_sekolah()
+                        st.cache_data.clear() # Reset Cache agar data baru terambil
                         st.success("✅ Data sekolah berhasil disimpan/diperbarui!")
                         time.sleep(1)
                         st.rerun()
@@ -982,7 +944,6 @@ elif st.session_state.role == "Superadmin":
                     df_upload = pd.read_excel(file_upload, dtype=str).dropna(subset=['nip', 'name', 'school_name'], how='all')
                     records = [{'nip': str(r['nip']).strip(), 'name': str(r['name']).strip(), 'school_name': str(r['school_name']).strip(), 'photo_uploaded': False, 'is_cadar': False} for _, r in df_upload.iterrows()]
                     supabase.table('pegawai').upsert(records, on_conflict='nip').execute()
-                    st.session_state.employees = get_data_pegawai()
                     st.success("✅ Berhasil upload pegawai!")
                     st.rerun()
                 except Exception as e: st.error(f"Gagal: {e}")
@@ -992,9 +953,8 @@ elif st.session_state.role == "Superadmin":
             hapus_nip = st.text_input("Masukkan NIP Pegawai yang ingin dihapus:")
             if st.button("Hapus Pegawai", type="primary"):
                 if hapus_nip:
-                    supabase.table('pegawai').delete().eq('nip', hapus_nip).execute()
+                    supabase.table('pegawai').delete().eq('nip', hapus_nip.strip()).execute()
                     st.success(f"Pegawai dengan NIP {hapus_nip} berhasil dihapus!")
-                    st.session_state.employees = get_data_pegawai()
                     time.sleep(1)
                     st.rerun()
 
@@ -1009,7 +969,7 @@ elif st.session_state.role == "Superadmin":
             with st.form("form_tambah_admin"):
                 new_user = st.text_input("Username Baru")
                 new_pass = st.text_input("Password", type="password")
-                opsi_sekolah_admin = ["Semua Sekolah"] + st.session_state.schools['school_name'].tolist()
+                opsi_sekolah_admin = ["Semua Sekolah"] + get_data_sekolah()['school_name'].tolist()
                 new_sekolah = st.selectbox("Akses Sekolah", opsi_sekolah_admin)
                 
                 if st.form_submit_button("Simpan Admin"):
@@ -1040,7 +1000,7 @@ elif st.session_state.role == "Superadmin":
             st.markdown("### Input Izin / Surat (Bypass)")
             nip_input_izin = st.text_input("NIP Pegawai:")
             if st.button("Input Surat Kosong/Izin") and nip_input_izin:
-                supabase.table('absensi').insert({'nip': nip_input_izin, 'nama': 'Manual', 'sekolah': 'Manual', 'tanggal': datetime.datetime.now().strftime('%Y-%m-%d'), 'jam': '-', 'status': 'Izin'}).execute()
+                supabase.table('absensi').insert({'nip': nip_input_izin.strip(), 'nama': 'Manual', 'sekolah': 'Manual', 'tanggal': datetime.datetime.now().strftime('%Y-%m-%d'), 'jam': '-', 'status': 'Izin'}).execute()
                 st.success("Izin dicatat!")
 
     # ------------------------------------------
@@ -1056,7 +1016,7 @@ elif st.session_state.role == "Superadmin":
                 st.success("Foto fisik berhasil diputus dari database (Hemat Egress).")
                 
             st.markdown("---")
-            st.markdown("### 🗑️ Hapus Data Absensi Harian")
+            st.markdown("### 🗑️️ Hapus Data Absensi Harian")
             tgl_hapus = st.date_input("Pilih Tanggal Absensi yang akan dihapus:")
             if st.button(f"Hapus Absensi Tanggal {tgl_hapus.strftime('%d-%m-%Y')}"):
                 supabase.table('absensi').delete().eq('tanggal', tgl_hapus.strftime('%Y-%m-%d')).execute()
@@ -1072,11 +1032,14 @@ elif st.session_state.role == "Superadmin":
             tampilkan_form_kunci("Jam")
         else:
             st.markdown("### ⚙ Jam Kerja")
-            b_in = st.session_state.settings['batas_masuk'].iloc[0] if not st.session_state.settings.empty else '07:30'
-            b_out = st.session_state.settings['batas_pulang'].iloc[0] if not st.session_state.settings.empty else '16:00'
+            df_settings = get_data_pengaturan()
+            b_in = df_settings['batas_masuk'].iloc[0] if not df_settings.empty else '07:30'
+            b_out = df_settings['batas_pulang'].iloc[0] if not df_settings.empty else '16:00'
             n_in = st.time_input("Batas Masuk", datetime.datetime.strptime(b_in, '%H:%M').time())
             n_out = st.time_input("Batas Pulang", datetime.datetime.strptime(b_out, '%H:%M').time())
             if st.button("Simpan Pengaturan"):
                 supabase.table('pengaturan').update({'batas_masuk': n_in.strftime('%H:%M'), 'batas_pulang': n_out.strftime('%H:%M')}).neq('batas_masuk', '').execute()
-                st.session_state.settings = get_data_pengaturan()
+                st.cache_data.clear() # Reset cache pengaturan
+                st.success("✅ Pengaturan jam berhasil diperbarui!")
+                time.sleep(1)
                 st.rerun()
