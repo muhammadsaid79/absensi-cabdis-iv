@@ -24,7 +24,13 @@
 
         <!-- BAGIAN 2: AREA ABSENSI -->
         <div id="absen-section" class="hidden space-y-4">
-            <div id="info-pegawai" class="p-3 bg-blue-50 rounded-lg text-xs border border-blue-200 text-slate-700"></div>
+            <!-- Informasi Pegawai + Tombol Perbarui Data -->
+            <div id="info-pegawai-box" class="p-3 bg-blue-50 rounded-lg text-xs border border-blue-200 text-slate-700 flex flex-col justify-between items-start gap-2">
+                <div id="info-pegawai"></div>
+                <button onclick="segarkanData()" class="w-full mt-1 bg-amber-500 hover:bg-amber-600 text-white font-semibold py-1.5 px-3 rounded text-[11px] transition flex items-center justify-center gap-1">
+                    🔄 Foto/Data Tidak Sesuai? Klik Perbarui
+                </button>
+            </div>
 
             <div id="gps-box" class="p-3 bg-amber-50 rounded-lg text-xs border border-amber-200 text-amber-800">
                 🌐 <strong>Lokasi GPS:</strong> <span id="gps-status">Mendeteksi lokasi...</span>
@@ -132,6 +138,22 @@
 
             aktifkanKamera();
             dapatkanGPS();
+        }
+
+        // FUNGSI UNTUK MERESET MEMORI LOKAL DAN MENGUNDUH ULANG DATA DARI SUPABASE
+        async function segarkanData() {
+            const nip = document.getElementById('nip-input').value.trim();
+            if (!nip) return;
+
+            // Hapus cache penyimpanan di browser
+            localStorage.removeItem(`nama_${nip}`);
+            localStorage.removeItem(`sekolah_${nip}`);
+            localStorage.removeItem(`foto_acuan_${nip}`);
+
+            alert("Memori lokal dibersihkan! Sistem akan mengambil data & foto profil terbaru dari database.");
+            
+            // Jalankan ulang fungsi cekPegawai untuk mengambil data segar dari server
+            await cekPegawai();
         }
 
         async function aktifkanKamera() {
