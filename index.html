@@ -4,9 +4,7 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Portal Presensi Pegawai</title>
-    <!-- Tailwind CSS untuk tampilan rapi -->
     <script src="https://cdn.tailwindcss.com"></script>
-    <!-- Pustaka Supabase -->
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 </head>
 <body class="bg-slate-100 min-h-screen flex items-center justify-center p-4 font-sans">
@@ -26,26 +24,27 @@
 
         <!-- BAGIAN 2: AREA ABSENSI (KAMERA & GPS) -->
         <div id="absen-section" class="hidden space-y-4">
-            <!-- Informasi Pegawai -->
             <div id="info-pegawai" class="p-3 bg-blue-50 rounded-lg text-xs border border-blue-200 text-slate-700"></div>
 
-            <!-- Status GPS -->
             <div id="gps-box" class="p-3 bg-amber-50 rounded-lg text-xs border border-amber-200 text-amber-800">
                 🌐 <strong>Lokasi GPS:</strong> <span id="gps-status">Mendeteksi lokasi...</span>
             </div>
 
-            <!-- Preview Kamera -->
             <div class="relative w-full bg-black rounded-lg overflow-hidden aspect-video flex items-center justify-center">
                 <video id="webcam" autoplay playsinline class="w-full h-full object-cover"></video>
                 <canvas id="canvas" class="hidden"></canvas>
                 <img id="photo-preview" class="hidden w-full h-full object-cover" alt="Hasil Foto">
             </div>
 
-            <!-- Tombol Aksi -->
             <button onclick="ambilFoto()" id="btn-foto" class="w-full bg-emerald-600 text-white font-bold py-2.5 px-4 rounded-lg hover:bg-emerald-700 transition text-sm">
                 📸 Tangkap Foto Bersebelahan
             </button>
             
+            <!-- TOMBOL KIRIM PRESENSI (BARU) -->
+            <button onclick="kirimPresensi()" id="btn-kirim" class="hidden w-full bg-blue-600 text-white font-bold py-2.5 px-4 rounded-lg hover:bg-blue-700 transition text-sm">
+                🚀 Kirim Presensi
+            </button>
+
             <button onclick="ulangFoto()" id="btn-ulang" class="hidden w-full bg-amber-500 text-white font-bold py-2 px-4 rounded-lg hover:bg-amber-600 transition text-sm">
                 🔄 Foto Ulang
             </button>
@@ -66,6 +65,10 @@
         let userLng = null;
         let fotoBase64 = null;
         let videoStream = null;
+        
+        // Variabel penyimpan data pegawai
+        let namaPegawai = "";
+        let sekolahPegawai = "";
 
         async function cekPegawai() {
             const nip = document.getElementById('nip-input').value.trim();
@@ -91,8 +94,11 @@
                 alert("Pegawai dengan NIP tersebut tidak ditemukan!");
                 return;
             }
+            
+            // Simpan nama dan sekolah untuk dikirim ke tabel absensi nanti
+            namaPegawai = data.name;
+            sekolahPegawai = data.school_name;
 
-            // Tampilkan UI Absen
             document.getElementById('login-section').classList.add('hidden');
             document.getElementById('absen-section').classList.remove('hidden');
             
@@ -101,12 +107,10 @@
                 🏫 <strong>Unit Kerja:</strong> ${data.school_name}
             `;
 
-            // Jalankan Kamera & GPS
             aktifkanKamera();
             dapatkanGPS();
         }
 
-        // 1. Fungsi Mengaktifkan Kamera
         async function aktifkanKamera() {
             try {
                 videoStream = await navigator.mediaDevices.getUserMedia({ 
@@ -120,7 +124,6 @@
             }
         }
 
-        // 2. Fungsi Mengambil Koordinat GPS
         function dapatkanGPS() {
             if ("geolocation" in navigator) {
                 navigator.geolocation.getCurrentPosition(
@@ -142,7 +145,6 @@
             }
         }
 
-        // 3. Fungsi Ambil Foto
         function ambilFoto() {
             const video = document.getElementById('webcam');
             const canvas = document.getElementById('canvas');
@@ -154,7 +156,6 @@
             const context = canvas.getContext('2d');
             context.drawImage(video, 0, 0, canvas.width, canvas.height);
             
-            // Kompres foto ke resolusi sedang agar hemat memori
             fotoBase64 = canvas.toDataURL('image/jpeg', 0.6);
 
             preview.src = fotoBase64;
@@ -163,9 +164,11 @@
 
             document.getElementById('btn-foto').classList.add('hidden');
             document.getElementById('btn-ulang').classList.remove('hidden');
+            
+            // Munculkan tombol kirim setelah foto diambil
+            document.getElementById('btn-kirim').classList.remove('hidden'); 
         }
 
-        // 4. Fungsi Ulang Foto
         function ulangFoto() {
             const video = document.getElementById('webcam');
             const preview = document.getElementById('photo-preview');
@@ -175,18 +178,52 @@
 
             document.getElementById('btn-foto').classList.remove('hidden');
             document.getElementById('btn-ulang').classList.add('hidden');
+            document.getElementById('btn-kirim').classList.add('hidden'); 
             fotoBase64 = null;
         }
 
-        // 5. Fungsi Batal / Reset
         function lokasiAwal() {
             if (videoStream) {
                 videoStream.getTracks().forEach(track => track.stop());
             }
             document.getElementById('absen-section').classList.add('hidden');
             document.getElementById('login-section').classList.remove('hidden');
+            document.getElementById('btn-kirim').classList.add('hidden'); 
             document.getElementById('nip-input').value = '';
             ulangFoto();
+        }
+
+        // FUNGSI BARU: MENGIRIM PRESENSI KE SUPABASE
+        async function kirimPresensi() {
+            const nip = document.getElementById('nip-input').value.trim();
+            const btnKirim = document.getElementById('btn-kirim');
+            
+            btnKirim.innerText = "Mengirim Data...";
+            btnKirim.disabled = true;
+
+            const sekarang = new Date();
+            const tglSekarang = sekarang.toISOString().split('T')[0];
+            const jamSekarang = sekarang.toTimeString().split(' ')[0];
+
+            // Menyisipkan ke tabel absensi
+            const { error } = await db.from('absensi').insert([{
+                nip: nip,
+                nama: namaPegawai,
+                sekolah: sekolahPegawai,
+                tanggal: tglSekarang,
+                jam: jamSekarang,
+                status: "Hadir (Web HTML)",
+                jarak_m: "0"
+            }]);
+
+            if (error) {
+                alert("Gagal mengirim presensi! Sistem menolak: " + error.message);
+                btnKirim.innerText = "🚀 Kirim Presensi";
+                btnKirim.disabled = false;
+            } else {
+                alert("✅ Presensi Berhasil Dikirim dan Tersimpan!");
+                lokasiAwal();
+            }
         }
     </script>
 </body>
