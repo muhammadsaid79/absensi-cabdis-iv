@@ -4,43 +4,68 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Portal Presensi Pegawai</title>
-    <!-- Tailwind CSS untuk membuat tampilan rapi dan modern -->
+    <!-- Tailwind CSS untuk tampilan rapi -->
     <script src="https://cdn.tailwindcss.com"></script>
-    <!-- Pustaka Supabase untuk HTML -->
+    <!-- Pustaka Supabase -->
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 </head>
-<body class="bg-slate-50 min-h-screen flex items-center justify-center p-4 font-sans">
-    <div class="bg-white p-8 rounded-xl shadow-lg w-full max-w-md border border-slate-200">
-        <h1 class="text-2xl font-bold text-center text-blue-600 mb-2">📍 Portal Presensi</h1>
-        <p class="text-sm text-center text-gray-500 mb-6">Cabdis Wilayah IV</p>
+<body class="bg-slate-100 min-h-screen flex items-center justify-center p-4 font-sans">
+    <div class="bg-white p-6 rounded-xl shadow-lg w-full max-w-md border border-slate-200">
+        <h1 class="text-2xl font-bold text-center text-blue-600 mb-1">📍 Portal Presensi</h1>
+        <p class="text-xs text-center text-gray-500 mb-6">Cabdis Wilayah IV</p>
 
-        <!-- Form Pencarian NIP -->
+        <!-- BAGIAN 1: INPUT NIP -->
         <div id="login-section">
             <label class="block text-sm font-medium text-gray-700 mb-2">Masukkan NIP Anda:</label>
-            <input type="text" id="nip-input" placeholder="Contoh: 198001012005011001" 
-                   class="w-full px-4 py-2 border rounded-lg focus:ring-blue-500 focus:border-blue-500 mb-4">
-            <button onclick="cekPegawai()" class="w-full bg-blue-600 text-white font-bold py-2 px-4 rounded-lg hover:bg-blue-700 transition">
+            <input type="number" id="nip-input" placeholder="Contoh: 198001012005011001" 
+                   class="w-full px-4 py-2 border rounded-lg focus:ring-blue-500 focus:border-blue-500 mb-4 text-sm">
+            <button onclick="cekPegawai()" id="btn-cari" class="w-full bg-blue-600 text-white font-bold py-2.5 px-4 rounded-lg hover:bg-blue-700 transition text-sm">
                 Cari Data Pegawai
             </button>
         </div>
 
-        <!-- Area Hasil Pencarian (Disembunyikan awalnya) -->
-        <div id="absen-section" class="hidden mt-6">
-            <div id="info-pegawai" class="p-4 bg-blue-50 rounded-lg text-sm mb-4 border border-blue-200"></div>
-            <p id="status-pesan" class="text-center text-sm font-semibold text-green-600 mt-4"></p>
-            <button onclick="lokasiAwal()" class="mt-4 w-full bg-gray-200 text-gray-700 font-bold py-2 px-4 rounded-lg hover:bg-gray-300 transition">
-                ⬅️ Kembali Cari NIP Lain
+        <!-- BAGIAN 2: AREA ABSENSI (KAMERA & GPS) -->
+        <div id="absen-section" class="hidden space-y-4">
+            <!-- Informasi Pegawai -->
+            <div id="info-pegawai" class="p-3 bg-blue-50 rounded-lg text-xs border border-blue-200 text-slate-700"></div>
+
+            <!-- Status GPS -->
+            <div id="gps-box" class="p-3 bg-amber-50 rounded-lg text-xs border border-amber-200 text-amber-800">
+                🌐 <strong>Lokasi GPS:</strong> <span id="gps-status">Mendeteksi lokasi...</span>
+            </div>
+
+            <!-- Preview Kamera -->
+            <div class="relative w-full bg-black rounded-lg overflow-hidden aspect-video flex items-center justify-center">
+                <video id="webcam" autoplay playsinline class="w-full h-full object-cover"></video>
+                <canvas id="canvas" class="hidden"></canvas>
+                <img id="photo-preview" class="hidden w-full h-full object-cover" alt="Hasil Foto">
+            </div>
+
+            <!-- Tombol Aksi -->
+            <button onclick="ambilFoto()" id="btn-foto" class="w-full bg-emerald-600 text-white font-bold py-2.5 px-4 rounded-lg hover:bg-emerald-700 transition text-sm">
+                📸 Tangkap Foto Bersebelahan
+            </button>
+            
+            <button onclick="ulangFoto()" id="btn-ulang" class="hidden w-full bg-amber-500 text-white font-bold py-2 px-4 rounded-lg hover:bg-amber-600 transition text-sm">
+                🔄 Foto Ulang
+            </button>
+
+            <button onclick="lokasiAwal()" class="w-full bg-gray-200 text-gray-700 font-semibold py-2 px-4 rounded-lg hover:bg-gray-300 transition text-xs">
+                ⬅️ Batal / Cari NIP Lain
             </button>
         </div>
     </div>
 
     <script>
-        // Data URL dan Key Supabase Anda
         const SUPABASE_URL = 'https://rulvwumuhlzzehwkibup.supabase.co';
         const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InJ1bHZ3dW11aGx6emVod2tpYnVwIiwicm9sZSI6ImFub24iLCJpYXQiOjE3OTA2ODYzNzMsImV4cCI6MjEwNjI2MjM3M30.-zFMHuGQRiPsBEsgOINZI4r6tEeUTFgnMcX4CN85t8Y';
 
-        // PERBAIKAN: Menggunakan nama variabel 'db' agar tidak bentrok
         const db = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+        
+        let userLat = null;
+        let userLng = null;
+        let fotoBase64 = null;
+        let videoStream = null;
 
         async function cekPegawai() {
             const nip = document.getElementById('nip-input').value.trim();
@@ -49,10 +74,10 @@
                 return;
             }
 
-            const btn = document.querySelector('button');
+            const btn = document.getElementById('btn-cari');
             btn.innerText = "Mencari data...";
-            
-            // Mencari data menggunakan variabel 'db'
+            btn.disabled = true;
+
             const { data, error } = await db
                 .from('pegawai')
                 .select('nip, name, school_name')
@@ -60,27 +85,108 @@
                 .single();
 
             btn.innerText = "Cari Data Pegawai";
+            btn.disabled = false;
 
             if (error || !data) {
-                alert("Pegawai dengan NIP tersebut tidak ditemukan di database!");
+                alert("Pegawai dengan NIP tersebut tidak ditemukan!");
                 return;
             }
 
+            // Tampilkan UI Absen
             document.getElementById('login-section').classList.add('hidden');
             document.getElementById('absen-section').classList.remove('hidden');
             
             document.getElementById('info-pegawai').innerHTML = `
-                👤 <strong>Nama:</strong> ${data.name} <br><br>
+                👤 <strong>Nama:</strong> ${data.name} <br>
                 🏫 <strong>Unit Kerja:</strong> ${data.school_name}
             `;
-            
-            document.getElementById('status-pesan').innerText = "✅ Koneksi ke database berhasil! Fitur GPS dan Kamera akan kita tambahkan di langkah selanjutnya.";
+
+            // Jalankan Kamera & GPS
+            aktifkanKamera();
+            dapatkanGPS();
         }
 
+        // 1. Fungsi Mengaktifkan Kamera
+        async function aktifkanKamera() {
+            try {
+                videoStream = await navigator.mediaDevices.getUserMedia({ 
+                    video: { facingMode: "user" }, 
+                    audio: false 
+                });
+                const video = document.getElementById('webcam');
+                video.srcObject = videoStream;
+            } catch (err) {
+                alert("Gagal mengakses kamera! Pastikan Anda memberikan izin kamera pada browser.");
+            }
+        }
+
+        // 2. Fungsi Mengambil Koordinat GPS
+        function dapatkanGPS() {
+            if ("geolocation" in navigator) {
+                navigator.geolocation.getCurrentPosition(
+                    (position) => {
+                        userLat = position.coords.latitude;
+                        userLng = position.coords.longitude;
+                        document.getElementById('gps-status').innerHTML = `
+                            <span class="text-green-700 font-bold">Terdeteksi ✅</span><br>
+                            <span class="text-[10px] text-gray-500">Lat: ${userLat.toFixed(5)}, Lng: ${userLng.toFixed(5)}</span>
+                        `;
+                    },
+                    (error) => {
+                        document.getElementById('gps-status').innerHTML = `<span class="text-red-600 font-bold">Gagal mendeteksi GPS. Pastikan Lokasi/GPS HP Aktif!</span>`;
+                    },
+                    { enableHighAccuracy: true }
+                );
+            } else {
+                document.getElementById('gps-status').innerText = "Browser tidak mendukung GPS.";
+            }
+        }
+
+        // 3. Fungsi Ambil Foto
+        function ambilFoto() {
+            const video = document.getElementById('webcam');
+            const canvas = document.getElementById('canvas');
+            const preview = document.getElementById('photo-preview');
+
+            canvas.width = video.videoWidth || 640;
+            canvas.height = video.videoHeight || 480;
+            
+            const context = canvas.getContext('2d');
+            context.drawImage(video, 0, 0, canvas.width, canvas.height);
+            
+            // Kompres foto ke resolusi sedang agar hemat memori
+            fotoBase64 = canvas.toDataURL('image/jpeg', 0.6);
+
+            preview.src = fotoBase64;
+            video.classList.add('hidden');
+            preview.classList.remove('hidden');
+
+            document.getElementById('btn-foto').classList.add('hidden');
+            document.getElementById('btn-ulang').classList.remove('hidden');
+        }
+
+        // 4. Fungsi Ulang Foto
+        function ulangFoto() {
+            const video = document.getElementById('webcam');
+            const preview = document.getElementById('photo-preview');
+
+            preview.classList.add('hidden');
+            video.classList.remove('hidden');
+
+            document.getElementById('btn-foto').classList.remove('hidden');
+            document.getElementById('btn-ulang').classList.add('hidden');
+            fotoBase64 = null;
+        }
+
+        // 5. Fungsi Batal / Reset
         function lokasiAwal() {
+            if (videoStream) {
+                videoStream.getTracks().forEach(track => track.stop());
+            }
             document.getElementById('absen-section').classList.add('hidden');
             document.getElementById('login-section').classList.remove('hidden');
             document.getElementById('nip-input').value = '';
+            ulangFoto();
         }
     </script>
 </body>
