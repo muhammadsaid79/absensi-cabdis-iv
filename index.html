@@ -27,6 +27,7 @@
             <!-- Informasi Pegawai + Tombol Perbarui Data -->
             <div id="info-pegawai-box" class="p-3 bg-blue-50 rounded-lg text-xs border border-blue-200 text-slate-700 flex flex-col justify-between items-start gap-2">
                 <div id="info-pegawai"></div>
+                <!-- FUNGSI 2: TOMBOL PERBARUI DATA TETAP ADA -->
                 <button onclick="segarkanData()" class="w-full mt-1 bg-amber-500 hover:bg-amber-600 text-white font-semibold py-1.5 px-3 rounded text-[11px] transition flex items-center justify-center gap-1">
                     🔄 Foto/Data Tidak Sesuai? Klik Perbarui
                 </button>
@@ -86,22 +87,22 @@
             btn.innerText = "Mencari data...";
             btn.disabled = true;
 
-            // 1. CEK DAHULU DI LOCAL STORAGE BROWSER (HEMAT BANDWIDTH SUPABASE)
+            // FUNGSI 1: CEK DAHULU DI LOCAL STORAGE BROWSER TETAP ADA
             const cacheFoto = localStorage.getItem(`foto_acuan_${nip}`);
             const cacheNama = localStorage.getItem(`nama_${nip}`);
             const cacheSekolah = localStorage.getItem(`sekolah_${nip}`);
 
             if (cacheFoto && cacheNama && cacheSekolah) {
-                // Mengambil dari Local Storage perangkat
                 namaPegawai = cacheNama;
                 sekolahPegawai = cacheSekolah;
                 fotoAcuanPegawai = cacheFoto;
                 console.log("Data pegawai dimuat dari Local Storage HP/PC (0 KB Bandwidth).");
             } else {
-                // 2. JIKA BELUM ADA DI LOCAL STORAGE, AMBIL DARI SUPABASE
+                // JIKA BELUM ADA DI LOCAL STORAGE, AMBIL DARI SUPABASE
+                // PERBAIKAN: Mengubah foto_url menjadi photo_base64 agar sesuai dengan database Anda
                 const { data, error } = await db
                     .from('pegawai')
-                    .select('nip, name, school_name, foto_url')
+                    .select('nip, name, school_name, photo_base64')
                     .eq('nip', nip)
                     .single();
 
@@ -114,9 +115,9 @@
 
                 namaPegawai = data.name;
                 sekolahPegawai = data.school_name;
-                fotoAcuanPegawai = data.foto_url || "";
+                // PERBAIKAN: Mengubah foto_url menjadi photo_base64
+                fotoAcuanPegawai = data.photo_base64 || "";
 
-                // Simpan ke Local Storage untuk penggunaan hari-hari berikutnya
                 localStorage.setItem(`nama_${nip}`, namaPegawai);
                 localStorage.setItem(`sekolah_${nip}`, sekolahPegawai);
                 if (fotoAcuanPegawai) {
@@ -140,19 +141,15 @@
             dapatkanGPS();
         }
 
-        // FUNGSI UNTUK MERESET MEMORI LOKAL DAN MENGUNDUH ULANG DATA DARI SUPABASE
         async function segarkanData() {
             const nip = document.getElementById('nip-input').value.trim();
             if (!nip) return;
 
-            // Hapus cache penyimpanan di browser
             localStorage.removeItem(`nama_${nip}`);
             localStorage.removeItem(`sekolah_${nip}`);
             localStorage.removeItem(`foto_acuan_${nip}`);
 
             alert("Memori lokal dibersihkan! Sistem akan mengambil data & foto profil terbaru dari database.");
-            
-            // Jalankan ulang fungsi cekPegawai untuk mengambil data segar dari server
             await cekPegawai();
         }
 
@@ -207,8 +204,6 @@
 
             document.getElementById('btn-foto').classList.add('hidden');
             document.getElementById('btn-ulang').classList.remove('hidden');
-            
-            // Tombol Kirim Muncul
             document.getElementById('btn-kirim').classList.remove('hidden'); 
         }
 
