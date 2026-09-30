@@ -35,14 +35,12 @@
     </div>
 
     <script>
-        // ==========================================
-        // GANTI BAGIAN INI DENGAN DATA DARI NOTEPAD ANDA
-        // ==========================================
+        // Data URL dan Key Supabase Anda
         const SUPABASE_URL = 'https://rulvwumuhlzzehwkibup.supabase.co';
         const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InJ1bHZ3dW11aGx6emVod2tpYnVwIiwicm9sZSI6ImFub24iLCJpYXQiOjE3OTA2ODYzNzMsImV4cCI6MjEwNjI2MjM3M30.-zFMHuGQRiPsBEsgOINZI4r6tEeUTFgnMcX4CN85t8Y';
 
-        // Menghubungkan ke Database Supabase
-        const supabase = supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+        // PERBAIKAN: Menggunakan nama variabel 'db' agar tidak bentrok
+        const db = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
 
         async function cekPegawai() {
             const nip = document.getElementById('nip-input').value.trim();
@@ -51,12 +49,11 @@
                 return;
             }
 
-            // Ubah teks tombol saat mencari
             const btn = document.querySelector('button');
             btn.innerText = "Mencari data...";
             
-            // Ambil data dari tabel 'pegawai' di Supabase
-            const { data, error } = await supabase
+            // Mencari data menggunakan variabel 'db'
+            const { data, error } = await db
                 .from('pegawai')
                 .select('nip, name, school_name')
                 .eq('nip', nip)
@@ -65,11 +62,10 @@
             btn.innerText = "Cari Data Pegawai";
 
             if (error || !data) {
-                alert("Pegawai dengan NIP tersebut tidak ditemukan!");
+                alert("Pegawai dengan NIP tersebut tidak ditemukan di database!");
                 return;
             }
 
-            // Jika berhasil, sembunyikan input dan tampilkan nama pegawai
             document.getElementById('login-section').classList.add('hidden');
             document.getElementById('absen-section').classList.remove('hidden');
             
