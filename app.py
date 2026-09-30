@@ -896,20 +896,51 @@ elif st.session_state.role == "Superadmin":
                 except Exception as e:
                     st.error(f"❌ Gagal menyimpan ke database: {e}")
 
-    # ------------------------------------------
-    # 4. TAB PC (TERKUNCI)
+   # ------------------------------------------
+    # 4. TAB PC (TERKUNCI) - GENERATE 3 KUNCI PC
     # ------------------------------------------
     with tab_pc:
         if not st.session_state['menu_unlocked']:
             tampilkan_form_kunci("PC")
         else:
-            st.markdown("### Buka Kunci PC")
-            st.caption("Ketik nama sekolah secara spesifik untuk memuat data PC.")
+            st.markdown("### 🔑 Kelola & Generate Kunci Perangkat PC")
+            st.caption("Ketik nama sekolah untuk membuat 3 kunci PC baru atau mencari kunci yang sudah ada.")
             
-            with st.form("form_cari_pc_super"):
-                sekolah_input_pc = st.text_input("Masukkan Nama Sekolah:", placeholder="Contoh: SMAN 1 WAJO", key="input_sekolah_pc_super")
-                btn_cari_pc = st.form_submit_button("🔍 Cari PC Sekolah")
+            with st.form("form_pc_superadmin"):
+                sekolah_input_pc = st.text_input("Masukkan Nama Sekolah:", placeholder="Contoh: SMKN 6 WAJO", key="input_sekolah_pc_super")
+                col_b1, col_b2 = st.columns(2)
+                btn_cari_pc = col_b1.form_submit_button("🔍 Cari PC Sekolah", use_container_width=True)
+                btn_generate_pc = col_b2.form_submit_button("🔑 Generate 3 Kunci PC", type="primary", use_container_width=True)
                 
+            # PROSES GENERATE 3 KUNCI PC
+            if btn_generate_pc:
+                nama_sekolah_clean = sekolah_input_pc.strip()
+                if not nama_sekolah_clean:
+                    st.warning("⚠️ Silahkan masukkan Nama Sekolah terlebih dahulu!")
+                else:
+                    # Menghilangkan spasi/karakter khusus untuk prefix kode kunci (misal: SMKN 6 WAJO -> SMKN6WAJO)
+                    prefix = "".join(e for e in nama_sekolah_clean if e.isalnum()).upper()
+                    kunci_1 = f"{prefix}-PC1"
+                    kunci_2 = f"{prefix}-PC2"
+                    kunci_3 = f"{prefix}-PC3"
+
+                    records = [
+                        {"kunci": kunci_1, "sekolah": nama_sekolah_clean, "status": "BELUM_TERPAKAI"},
+                        {"kunci": kunci_2, "sekolah": nama_sekolah_clean, "status": "BELUM_TERPAKAI"},
+                        {"kunci": kunci_3, "sekolah": nama_sekolah_clean, "status": "BELUM_TERPAKAI"}
+                    ]
+
+                    try:
+                        # Masukkan/update 3 kunci ke database Supabase
+                        supabase.table('kunci_perangkat').upsert(records, on_conflict='kunci').execute()
+                        st.success(f"✅ Berhasil membuat 3 Kunci PC untuk **{nama_sekolah_clean}**!")
+                        st.session_state.last_searched_school_pc = nama_sekolah_clean
+                        time.sleep(1)
+                        st.rerun()
+                    except Exception as e:
+                        st.error(f"❌ Gagal membuat kunci: {e}")
+
+            # PROSES PENCARIAN KUNCI
             if btn_cari_pc:
                 if sekolah_input_pc.strip():
                     st.session_state.last_searched_school_pc = sekolah_input_pc.strip()
@@ -920,21 +951,30 @@ elif st.session_state.role == "Superadmin":
             if st.session_state.get('last_searched_school_pc'):
                 nama_sekolah_dicari = st.session_state.last_searched_school_pc
                 try:
-                    res_pc_super = supabase.table('perangkat_sekolah').select('id, school_name, device_name').ilike('school_name', f"%{nama_sekolah_dicari}%").execute()
+                    res_pc_super = supabase.table('kunci_perangkat').select('*').ilike('sekolah', f"%{nama_sekolah_dicari}%").execute()
                     
                     if res_pc_super.data:
-                        st.success(f"✅ Ditemukan {len(res_pc_super.data)} PC terdaftar untuk pencarian: **{nama_sekolah_dicari}**")
-                        for idx, r_pc in pd.DataFrame(res_pc_super.data).iterrows():
-                            c1, c2, c3 = st.columns([2, 2, 1])
-                            c1.write(r_pc['school_name'])
-                            c2.write(r_pc['device_name'])
-                            if c3.button("🔓 Hapus Kunci", key=f"del_pc_super_{r_pc['id']}"):
-                                supabase.table('perangkat_sekolah').delete().eq('id', r_pc['id']).execute()
-                                st.success(f"Kunci PC {r_pc['device_name']} berhasil dihapus!")
+                        df_kunci = pd.DataFrame(res_pc_super.data)
+                        st.success(f"✅ Ditemukan {len(df_kunci)} Kunci PC untuk: **{nama_sekolah_dicari}**")
+                        
+                        for idx, r_pc in df_kunci.iterrows():
+                            c1, c2, c3, c4 = st.columns([2, 2, 2, 1])
+                            c1.write(f"🏫 **{r_pc['sekolah']}**")
+                            c2.write(f"🔑 `{r_pc['kunci']}`")
+                            
+                            status_str = r_pc.get('status', 'BELUM_TERPAKAI')
+                            if status_str == 'TERPAKAI':
+                                c3.markdown("🔴 **TERPAKAI**")
+                            else:
+                                c3.markdown("🟢 **BELUM TERPAKAI**")
+
+                            if c4.button("🗑️ Hapus", key=f"del_kunci_{r_pc['kunci']}"):
+                                supabase.table('kunci_perangkat').delete().eq('kunci', r_pc['kunci']).execute()
+                                st.success(f"Kunci {r_pc['kunci']} berhasil dihapus!")
                                 time.sleep(1)
                                 st.rerun()
                     else:
-                        st.info(f"Tidak ada PC terdaftar untuk nama sekolah: **{nama_sekolah_dicari}**")
+                        st.info(f"Belum ada Kunci PC terdaftar untuk nama sekolah: **{nama_sekolah_dicari}**")
                 except Exception as e: 
                     st.error(f"Gagal mengambil data dari Supabase: {e}")
 
