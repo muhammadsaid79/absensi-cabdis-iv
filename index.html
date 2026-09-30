@@ -27,7 +27,6 @@
             <!-- Informasi Pegawai + Tombol Perbarui Data -->
             <div id="info-pegawai-box" class="p-3 bg-blue-50 rounded-lg text-xs border border-blue-200 text-slate-700 flex flex-col justify-between items-start gap-2">
                 <div id="info-pegawai"></div>
-                <!-- FUNGSI 2: TOMBOL PERBARUI DATA TETAP ADA -->
                 <button onclick="segarkanData()" class="w-full mt-1 bg-amber-500 hover:bg-amber-600 text-white font-semibold py-1.5 px-3 rounded text-[11px] transition flex items-center justify-center gap-1">
                     🔄 Foto/Data Tidak Sesuai? Klik Perbarui
                 </button>
@@ -87,7 +86,6 @@
             btn.innerText = "Mencari data...";
             btn.disabled = true;
 
-            // FUNGSI 1: CEK DAHULU DI LOCAL STORAGE BROWSER TETAP ADA
             const cacheFoto = localStorage.getItem(`foto_acuan_${nip}`);
             const cacheNama = localStorage.getItem(`nama_${nip}`);
             const cacheSekolah = localStorage.getItem(`sekolah_${nip}`);
@@ -96,26 +94,25 @@
                 namaPegawai = cacheNama;
                 sekolahPegawai = cacheSekolah;
                 fotoAcuanPegawai = cacheFoto;
-                console.log("Data pegawai dimuat dari Local Storage HP/PC (0 KB Bandwidth).");
+                console.log("Data pegawai dimuat dari Local Storage HP/PC.");
             } else {
-                // JIKA BELUM ADA DI LOCAL STORAGE, AMBIL DARI SUPABASE
-                // PERBAIKAN: Mengubah foto_url menjadi photo_base64 agar sesuai dengan database Anda
+                // PERBAIKAN: Mengubah 'name' menjadi 'nama' agar sesuai dengan kolom database Supabase Anda
                 const { data, error } = await db
                     .from('pegawai')
-                    .select('nip, name, school_name, photo_base64')
+                    .select('nip, nama, school_name, photo_base64')
                     .eq('nip', nip)
                     .single();
 
                 if (error || !data) {
+                    console.error("Detail Error:", error);
                     alert("Pegawai dengan NIP tersebut tidak ditemukan!");
                     btn.innerText = "Cari Data Pegawai";
                     btn.disabled = false;
                     return;
                 }
 
-                namaPegawai = data.name;
+                namaPegawai = data.nama;
                 sekolahPegawai = data.school_name;
-                // PERBAIKAN: Mengubah foto_url menjadi photo_base64
                 fotoAcuanPegawai = data.photo_base64 || "";
 
                 localStorage.setItem(`nama_${nip}`, namaPegawai);
