@@ -6,6 +6,8 @@
     <title>Portal Presensi Pegawai</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+    <!-- MODUL AI FACE DETECTION & RECOGNITION -->
+    <script src="https://cdn.jsdelivr.net/npm/@vladmandic/face-api/dist/face-api.js"></script>
 </head>
 <body class="bg-slate-100 min-h-screen flex items-center justify-center p-4 font-sans">
     <div class="bg-white p-6 rounded-xl shadow-lg w-full max-w-md border border-slate-200">
@@ -28,12 +30,17 @@
             <div id="info-pegawai-box" class="p-3 bg-blue-50 rounded-lg text-xs border border-blue-200 text-slate-700 flex flex-col justify-between items-start gap-2">
                 <div id="info-pegawai"></div>
                 <button onclick="segarkanData()" class="w-full mt-1 bg-amber-500 hover:bg-amber-600 text-white font-semibold py-1.5 px-3 rounded text-[11px] transition flex items-center justify-center gap-1">
-                    🔄 Foto/Data Tidak Sesuai? Klik Perbarui
+                    🔄 Foto/Data Tidak Sesuai? Klik Perbarui namun pastikan sudah melaporkan ke admin cabdis mochd ghazali/jeddah/gaza
                 </button>
             </div>
 
             <div id="gps-box" class="p-3 bg-amber-50 rounded-lg text-xs border border-amber-200 text-amber-800">
                 🌐 <strong>Lokasi GPS:</strong> <span id="gps-status">Mendeteksi lokasi...</span>
+            </div>
+
+            <!-- STATUS VERIFIKASI AI -->
+            <div id="ai-status" class="p-2 bg-slate-100 border border-slate-200 rounded text-center text-xs text-slate-600 font-medium">
+                🤖 AI: Memuat modul pendeteksi wajah...
             </div>
 
             <div class="relative w-full bg-black rounded-lg overflow-hidden aspect-video flex items-center justify-center">
@@ -45,13 +52,14 @@
             <button onclick="ambilFoto()" id="btn-foto" class="w-full bg-emerald-600 text-white font-bold py-2.5 px-4 rounded-lg hover:bg-emerald-700 transition text-sm">
                 📸 Tangkap Foto
             </button>
-            
-            <button onclick="kirimPresensi()" id="btn-kirim" class="hidden w-full bg-blue-600 text-white font-bold py-2.5 px-4 rounded-lg hover:bg-blue-700 transition text-sm">
-                🚀 Kirim Presensi
-            </button>
 
             <button onclick="ulangFoto()" id="btn-ulang" class="hidden w-full bg-amber-500 text-white font-bold py-2 px-4 rounded-lg hover:bg-amber-600 transition text-sm">
                 🔄 Foto Ulang
+            </button>
+            
+            <!-- Tombol Kirim hanya muncul jika lolos Verifikasi AI -->
+            <button onclick="kirimPresensi()" id="btn-kirim" class="hidden w-full bg-blue-600 text-white font-bold py-2.5 px-4 rounded-lg hover:bg-blue-700 transition text-sm">
+                🚀 Kirim Presensi
             </button>
 
             <button onclick="lokasiAwal()" class="w-full bg-gray-200 text-gray-700 font-semibold py-2 px-4 rounded-lg hover:bg-gray-300 transition text-xs">
@@ -75,6 +83,34 @@
         let sekolahPegawai = "";
         let fotoAcuanPegawai = "";
 
+        // VARIABEL MODEL AI
+        let isAiLoaded = false;
+        const MODEL_URL = 'https://cdn.jsdelivr.net/npm/@vladmandic/face-api/model/';
+
+        // MEMUAT MODEL AI SAAT HALAMAN DIMUAT
+        async function muatModelAI() {
+            const aiStatus = document.getElementById('ai-status');
+            try {
+                if (aiStatus) aiStatus.innerHTML = "🤖 AI: Memuat modul kecerdasan buatan...";
+                await faceapi.nets.ssdMobilenetv1.loadFromUri(MODEL_URL);
+                await faceapi.nets.faceLandmark64Net.loadFromUri(MODEL_URL);
+                await faceapi.nets.faceRecognitionNet.loadFromUri(MODEL_URL);
+                isAiLoaded = true;
+                if (aiStatus) {
+                    aiStatus.className = "p-2 bg-emerald-50 border border-emerald-200 rounded text-center text-xs text-emerald-800 font-medium";
+                    aiStatus.innerHTML = "🤖 AI Siap: Siapkan wajah Anda ke kamera.";
+                }
+            } catch (err) {
+                console.error("Gagal memuat model AI:", err);
+                if (aiStatus) {
+                    aiStatus.className = "p-2 bg-red-50 border border-red-200 rounded text-center text-xs text-red-700 font-medium";
+                    aiStatus.innerHTML = "⚠️ Gagal memuat modul AI. Pastikan terkoneksi internet.";
+                }
+            }
+        }
+
+        window.addEventListener('DOMContentLoaded', muatModelAI);
+
         async function cekPegawai() {
             const nip = document.getElementById('nip-input').value.trim();
             if (!nip) {
@@ -96,7 +132,6 @@
                 fotoAcuanPegawai = cacheFoto;
                 console.log("Data pegawai dimuat dari Local Storage HP/PC.");
             } else {
-                // PERBAIKAN: Mengubah 'name' menjadi 'nama' agar sesuai dengan kolom database Supabase Anda
                 const { data, error } = await db
                     .from('pegawai')
                     .select('nip, nama, school_name, photo_base64')
@@ -182,10 +217,13 @@
             }
         }
 
-        function ambilFoto() {
+        // FUNGSI TANGKAP FOTO & VERIFIKASI WAJAH DENGAN AI
+        async function ambilFoto() {
             const video = document.getElementById('webcam');
             const canvas = document.getElementById('canvas');
             const preview = document.getElementById('photo-preview');
+            const btnFoto = document.getElementById('btn-foto');
+            const aiStatus = document.getElementById('ai-status');
 
             canvas.width = video.videoWidth || 640;
             canvas.height = video.videoHeight || 480;
@@ -193,20 +231,81 @@
             const context = canvas.getContext('2d');
             context.drawImage(video, 0, 0, canvas.width, canvas.height);
             
-            fotoBase64 = canvas.toDataURL('image/jpeg', 0.6);
+            fotoBase64 = canvas.toDataURL('image/jpeg', 0.8);
 
             preview.src = fotoBase64;
             video.classList.add('hidden');
             preview.classList.remove('hidden');
 
-            document.getElementById('btn-foto').classList.add('hidden');
+            btnFoto.classList.add('hidden');
             document.getElementById('btn-ulang').classList.remove('hidden');
-            document.getElementById('btn-kirim').classList.remove('hidden'); 
+            document.getElementById('btn-kirim').classList.add('hidden'); // Sembunyikan dulu sampai terverifikasi
+
+            // TAHAP DETEKSI AI
+            if (!isAiLoaded) {
+                aiStatus.className = "p-2 bg-amber-100 text-amber-800 rounded text-center text-xs font-semibold";
+                aiStatus.innerHTML = "⏳ Menunggu modul AI selesai dimuat...";
+                await muatModelAI();
+            }
+
+            aiStatus.className = "p-2 bg-blue-100 text-blue-800 rounded text-center text-xs font-semibold animate-pulse";
+            aiStatus.innerHTML = "🔍 AI sedang mendeteksi & memverifikasi wajah...";
+
+            try {
+                // 1. Deteksi Wajah pada Foto Hasil Kamera
+                const imgKamera = await faceapi.fetchImage(fotoBase64);
+                const deteksiKamera = await faceapi.detectSingleFace(imgKamera).withFaceLandmarks().withFaceDescriptor();
+
+                if (!deteksiKamera) {
+                    aiStatus.className = "p-2 bg-red-100 text-red-700 rounded text-center text-xs font-semibold";
+                    aiStatus.innerHTML = "❌ Wajah tidak terdeteksi! Ambil foto ulang dengan wajah menghadap kamera.";
+                    alert("❌ Wajah tidak terdeteksi! Pastikan wajah Anda terlihat jelas.");
+                    return;
+                }
+
+                // 2. Pencocokan dengan Foto Profil Acuan (jika tersedia di database)
+                if (fotoAcuanPegawai && fotoAcuanPegawai.trim() !== "" && fotoAcuanPegawai !== "NULL") {
+                    try {
+                        const imgAcuan = await faceapi.fetchImage(fotoAcuanPegawai);
+                        const deteksiAcuan = await faceapi.detectSingleFace(imgAcuan).withFaceLandmarks().withFaceDescriptor();
+
+                        if (deteksiAcuan) {
+                            // Hitung jarak Euclidean antara dua vektor wajah
+                            const jarak = faceapi.euclideanDistance(deteksiKamera.descriptor, deteksiAcuan.descriptor);
+                            console.log("Jarak Kemiripan AI (Distance):", jarak);
+
+                            // Batas toleransi kemiripan (threshold standar: 0.6)
+                            if (jarak > 0.6) {
+                                aiStatus.className = "p-2 bg-red-100 text-red-700 rounded text-center text-xs font-semibold";
+                                aiStatus.innerHTML = "❌ Wajah TIDAK COCOK dengan foto profil pegawai!";
+                                alert("❌ Wajah Anda tidak cocok dengan foto profil pegawai yang terdaftar!");
+                                return;
+                            }
+                        }
+                    } catch (e) {
+                        console.warn("Gagal memuat foto acuan untuk komparasi:", e);
+                    }
+                }
+
+                // Jika lolos semua pemeriksaan AI:
+                aiStatus.className = "p-2 bg-emerald-100 text-emerald-800 rounded text-center text-xs font-semibold";
+                aiStatus.innerHTML = "✅ AI: Wajah Terverifikasi & Cocok! Silakan kirim presensi.";
+                
+                // MUNCULKAN TOMBOL KIRIM
+                document.getElementById('btn-kirim').classList.remove('hidden');
+
+            } catch (err) {
+                console.error("Error Verifikasi AI:", err);
+                aiStatus.className = "p-2 bg-red-100 text-red-700 rounded text-center text-xs font-semibold";
+                aiStatus.innerHTML = "❌ Terjadi kesalahan saat mendeteksi wajah.";
+                alert("Gagal melakukan verifikasi wajah: " + err.message);
+            }
         }
 
         function ulangFoto() {
             const video = document.getElementById('webcam');
             const preview = document.getElementById('photo-preview');
+            const aiStatus = document.getElementById('ai-status');
 
             preview.classList.add('hidden');
             video.classList.remove('hidden');
@@ -214,7 +313,12 @@
             document.getElementById('btn-foto').classList.remove('hidden');
             document.getElementById('btn-ulang').classList.add('hidden');
             document.getElementById('btn-kirim').classList.add('hidden'); 
+            
             fotoBase64 = null;
+            if (aiStatus) {
+                aiStatus.className = "p-2 bg-slate-100 border border-slate-200 rounded text-center text-xs text-slate-600 font-medium";
+                aiStatus.innerHTML = "🤖 AI Siap: Posisikan wajah Anda pada kamera.";
+            }
         }
 
         function lokasiAwal() {
