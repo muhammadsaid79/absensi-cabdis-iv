@@ -495,32 +495,34 @@
                 lokasiAwal();
             }
         }
+    </script> <!-- TAMBAHKAN TAG PENUTUP INI DI SINI -->
+
     <script>
-  // 1. Matikan Klik Kanan
-  document.addEventListener('contextmenu', function(e) {
-    e.preventDefault();
-  });
+      // 1. Matikan Klik Kanan
+      document.addEventListener('contextmenu', function(e) {
+        e.preventDefault();
+      });
 
-  // 2. Matikan F12, Ctrl+Shift+I, Ctrl+Shift+J, Ctrl+Shift+C, dan Ctrl+U
-  document.addEventListener('keydown', function(e) {
-    // Tombol F12
-    if (e.key === 'F12' || e.keyCode === 123) {
-      e.preventDefault();
-      return false;
-    }
-    
-    // Ctrl + Shift + I (Inspect) / J (Console) / C (Select Element)
-    if (e.ctrlKey && e.shiftKey && (e.key === 'I' || e.key === 'i' || e.key === 'J' || e.key === 'j' || e.key === 'C' || e.key === 'c')) {
-      e.preventDefault();
-      return false;
-    }
+      // 2. Matikan F12, Ctrl+Shift+I, Ctrl+Shift+J, Ctrl+Shift+C, dan Ctrl+U
+      document.addEventListener('keydown', function(e) {
+        // Tombol F12
+        if (e.key === 'F12' || e.keyCode === 123) {
+          e.preventDefault();
+          return false;
+        }
+        
+        // Ctrl + Shift + I (Inspect) / J (Console) / C (Select Element)
+        if (e.ctrlKey && e.shiftKey && (e.key === 'I' || e.key === 'i' || e.key === 'J' || e.key === 'j' || e.key === 'C' || e.key === 'c')) {
+          e.preventDefault();
+          return false;
+        }
 
-    // Ctrl + U (View Source)
-    if (e.ctrlKey && (e.key === 'u' || e.key === 'U')) {
-      e.preventDefault();
-      return false;
-    }
-  });
-</script>
+        // Ctrl + U (View Source)
+        if (e.ctrlKey && (e.key === 'u' || e.key === 'U')) {
+          e.preventDefault();
+          return false;
+        }
+      });
+    </script>
 </body>
 </html>
