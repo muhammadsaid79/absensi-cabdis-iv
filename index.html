@@ -4,7 +4,10 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Portal Presensi Pegawai</title>
+    
+    <!-- FAVICON -->
     <link rel="icon" type="image/png" href="favicon.png">
+    
     <script src="https://cdn.tailwindcss.com"></script>
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
     <!-- MODUL AI FACE DETECTION & RECOGNITION (VERSI STABIL) -->
@@ -13,9 +16,25 @@
 <body class="bg-slate-100 min-h-screen flex items-center justify-center p-4 font-sans">
     <div class="bg-white p-6 rounded-xl shadow-lg w-full max-w-md border border-slate-200">
         <h1 class="text-2xl font-bold text-center text-blue-600 mb-1">📍 Portal Presensi</h1>
-        <p class="text-xs text-center text-gray-500 mb-6">Cabdis Wilayah IV</p>
+        <p class="text-xs text-center text-gray-500 mb-4">Cabdis Wilayah IV</p>
 
-        <!-- BAGIAN 1: INPUT NIP -->
+        <!-- STATUS VERIFIKASI PERANGKAT / PC -->
+        <div id="device-status-box" class="mb-4 p-2.5 bg-amber-50 border border-amber-200 rounded-lg text-center text-xs font-semibold text-amber-800 flex items-center justify-between">
+            <span id="device-status-text">💻 Memeriksa Kunci Perangkat...</span>
+            <button onclick="bukaModalKunci()" class="text-[10px] bg-slate-200 hover:bg-slate-300 px-2 py-1 rounded text-slate-700 ml-2">⚙️ Atur PC</button>
+        </div>
+
+        <!-- LAYAR TERKUNCI (JIKA PC BELUM TERDAFTAR) -->
+        <div id="locked-section" class="hidden text-center py-6">
+            <div class="text-4xl mb-2">🔒</div>
+            <h2 class="text-base font-bold text-gray-800 mb-1">Perangkat Belum Terverifikasi</h2>
+            <p class="text-xs text-gray-500 mb-4">Halaman ini hanya dapat diakses melalui PC Resmi Sekolah yang terdaftar.</p>
+            <button onclick="bukaModalKunci()" class="bg-blue-600 hover:bg-blue-700 text-white text-xs font-bold py-2 px-4 rounded-lg transition">
+                🔑 Masukkan Kunci Perangkat Sekolah
+            </button>
+        </div>
+
+        <!-- BAGIAN 1: INPUT NIP (AKAN MUNCUL JIKA PC TERVERIFIKASI) -->
         <div id="login-section">
             <label class="block text-sm font-medium text-gray-700 mb-2">Masukkan NIP Anda:</label>
             <input type="number" id="nip-input" placeholder="Contoh: 198001012005011001" 
@@ -69,6 +88,19 @@
         </div>
     </div>
 
+    <!-- MODAL INPUT KUNCI PERANGKAT -->
+    <div id="modal-kunci" class="hidden fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
+        <div class="bg-white p-5 rounded-xl shadow-xl w-full max-w-xs text-center space-y-3">
+            <h3 class="text-sm font-bold text-gray-800">🔑 Registrasi PC Sekolah</h3>
+            <p class="text-xs text-gray-500">Masukkan Kunci Perangkat yang diberikan Admin Cabdis untuk mendaftarkan PC ini.</p>
+            <input type="text" id="kunci-input" placeholder="Masukkan Kunci Perangkat..." class="w-full px-3 py-2 border rounded-lg text-xs uppercase text-center font-mono">
+            <div class="flex gap-2">
+                <button onclick="tutupModalKunci()" class="w-1/2 bg-gray-200 hover:bg-gray-300 text-gray-700 text-xs font-bold py-2 rounded-lg">Batal</button>
+                <button onclick="simpanKunciPerangkat()" class="w-1/2 bg-blue-600 hover:bg-blue-700 text-white text-xs font-bold py-2 rounded-lg">Verifikasi</button>
+            </div>
+        </div>
+    </div>
+
     <script>
         const SUPABASE_URL = 'https://rulvwumuhlzzehwkibup.supabase.co';
         const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InJ1bHZ3dW11aGx6emVod2tpYnVwIiwicm9sZSI6ImFub24iLCJpYXQiOjE3OTA2ODYzNzMsImV4cCI6MjEwNjI2MjM3M30.-zFMHuGQRiPsBEsgOINZI4r6tEeUTFgnMcX4CN85t8Y';
@@ -84,9 +116,82 @@
         let sekolahPegawai = "";
         let fotoAcuanPegawai = "";
 
-        // VARIABEL MODEL AI
+        // VARIABEL PERANGKAT & AI
+        let sekolahPerangkatTerdaftar = null;
         let isAiLoaded = false;
         const MODEL_URL = 'https://cdn.jsdelivr.net/gh/justadudewhohacks/face-api.js@0.22.2/weights';
+
+        // 1. VERIFIKASI PERANGKAT SAAT PERTAMA KALI MEMUAT WEB
+        async function verifikasiPerangkat() {
+            const statusBox = document.getElementById('device-status-box');
+            const statusText = document.getElementById('device-status-text');
+            const loginSection = document.getElementById('login-section');
+            const lockedSection = document.getElementById('locked-section');
+
+            const savedKey = localStorage.getItem('kunci_perangkat_sekolah');
+
+            if (!savedKey) {
+                sekolahPerangkatTerdaftar = null;
+                statusBox.className = "mb-4 p-2.5 bg-red-50 border border-red-200 rounded-lg text-center text-xs font-semibold text-red-800 flex items-center justify-between";
+                statusText.innerHTML = "🚫 Perangkat Belum Terdaftar";
+                loginSection.classList.add('hidden');
+                lockedSection.classList.remove('hidden');
+                return;
+            }
+
+            // Cek ke Database Supabase
+            const { data, error } = await db
+                .from('kunci_perangkat')
+                .select('sekolah')
+                .eq('kunci', savedKey)
+                .single();
+
+            if (error || !data) {
+                localStorage.removeItem('kunci_perangkat_sekolah');
+                sekolahPerangkatTerdaftar = null;
+                statusBox.className = "mb-4 p-2.5 bg-red-50 border border-red-200 rounded-lg text-center text-xs font-semibold text-red-800 flex items-center justify-between";
+                statusText.innerHTML = "❌ Kunci Perangkat Tidak Valid";
+                loginSection.classList.add('hidden');
+                lockedSection.classList.remove('hidden');
+            } else {
+                sekolahPerangkatTerdaftar = data.sekolah;
+                statusBox.className = "mb-4 p-2.5 bg-emerald-50 border border-emerald-200 rounded-lg text-center text-xs font-semibold text-emerald-800 flex items-center justify-between";
+                statusText.innerHTML = `💻 Perangkat Resmi: <strong>${sekolahPerangkatTerdaftar}</strong>`;
+                lockedSection.classList.add('hidden');
+                loginSection.classList.remove('hidden');
+            }
+        }
+
+        function bukaModalKunci() {
+            document.getElementById('modal-kunci').classList.remove('hidden');
+        }
+
+        function tutupModalKunci() {
+            document.getElementById('modal-kunci').classList.add('hidden');
+        }
+
+        async function simpanKunciPerangkat() {
+            const inputKunci = document.getElementById('kunci-input').value.trim();
+            if (!inputKunci) {
+                alert("Masukkan kunci perangkat terlebih dahulu!");
+                return;
+            }
+
+            const { data, error } = await db
+                .from('kunci_perangkat')
+                .select('sekolah')
+                .eq('kunci', inputKunci)
+                .single();
+
+            if (error || !data) {
+                alert("❌ Kunci perangkat tidak ditemukan atau salah!");
+            } else {
+                localStorage.setItem('kunci_perangkat_sekolah', inputKunci);
+                alert(`✅ Berhasil! PC ini telah terdaftar sebagai PC Resmi untuk: ${data.sekolah}`);
+                tutupModalKunci();
+                await verifikasiPerangkat();
+            }
+        }
 
         // MEMUAT MODEL AI SAAT HALAMAN DIMUAT
         async function muatModelAI() {
@@ -94,7 +199,7 @@
             try {
                 if (aiStatus) aiStatus.innerHTML = "🤖 AI: Memuat modul kecerdasan buatan...";
                 await faceapi.nets.ssdMobilenetv1.loadFromUri(MODEL_URL);
-                await faceapi.nets.faceLandmark68Net.loadFromUri(MODEL_URL); // Diperbaiki dari 64Net ke 68Net
+                await faceapi.nets.faceLandmark68Net.loadFromUri(MODEL_URL);
                 await faceapi.nets.faceRecognitionNet.loadFromUri(MODEL_URL);
                 isAiLoaded = true;
                 if (aiStatus) {
@@ -110,9 +215,17 @@
             }
         }
 
-        window.addEventListener('DOMContentLoaded', muatModelAI);
+        window.addEventListener('DOMContentLoaded', async () => {
+            await verifikasiPerangkat();
+            await muatModelAI();
+        });
 
         async function cekPegawai() {
+            if (!sekolahPerangkatTerdaftar) {
+                alert("🔒 Akses Ditolak! PC ini belum terdaftar sebagai PC Resmi Sekolah.");
+                return;
+            }
+
             const nip = document.getElementById('nip-input').value.trim();
             if (!nip) {
                 alert("Silakan masukkan NIP terlebih dahulu!");
@@ -131,7 +244,6 @@
                 namaPegawai = cacheNama;
                 sekolahPegawai = cacheSekolah;
                 fotoAcuanPegawai = cacheFoto;
-                console.log("Data pegawai dimuat dari Local Storage HP/PC.");
             } else {
                 const { data, error } = await db
                     .from('pegawai')
@@ -140,7 +252,6 @@
                     .single();
 
                 if (error || !data) {
-                    console.error("Detail Error:", error);
                     alert("Pegawai dengan NIP tersebut tidak ditemukan!");
                     btn.innerText = "Cari Data Pegawai";
                     btn.disabled = false;
@@ -153,10 +264,15 @@
 
                 localStorage.setItem(`nama_${nip}`, namaPegawai);
                 localStorage.setItem(`sekolah_${nip}`, sekolahPegawai);
-                if (fotoAcuanPegawai) {
-                    localStorage.setItem(`foto_acuan_${nip}`, fotoAcuanPegawai);
-                }
-                console.log("Data dimuat dari Supabase & disimpan ke Local Storage.");
+                if (fotoAcuanPegawai) localStorage.setItem(`foto_acuan_${nip}`, fotoAcuanPegawai);
+            }
+
+            // COCOKKAN UNIT KERJA PEGAWAI DENGAN LOKASI PC
+            if (sekolahPegawai.trim().toLowerCase() !== sekolahPerangkatTerdaftar.trim().toLowerCase()) {
+                alert(`🚫 Akses Ditolak!\n\nAnda terdaftar di unit kerja "${sekolahPegawai}", sedangkan PC ini dikunci untuk "${sekolahPerangkatTerdaftar}". Silakan presensi di PC Sekolah Anda!`);
+                btn.innerText = "Cari Data Pegawai";
+                btn.disabled = false;
+                return;
             }
 
             btn.innerText = "Cari Data Pegawai";
@@ -240,9 +356,8 @@
 
             btnFoto.classList.add('hidden');
             document.getElementById('btn-ulang').classList.remove('hidden');
-            document.getElementById('btn-kirim').classList.add('hidden'); // Sembunyikan dulu sampai terverifikasi
+            document.getElementById('btn-kirim').classList.add('hidden');
 
-            // TAHAP DETEKSI AI
             if (!isAiLoaded) {
                 aiStatus.className = "p-2 bg-amber-100 text-amber-800 rounded text-center text-xs font-semibold";
                 aiStatus.innerHTML = "⏳ Menunggu modul AI selesai dimuat...";
@@ -253,7 +368,6 @@
             aiStatus.innerHTML = "🔍 AI sedang mendeteksi & memverifikasi wajah...";
 
             try {
-                // 1. Deteksi Wajah pada Foto Hasil Kamera
                 const imgKamera = await faceapi.fetchImage(fotoBase64);
                 const deteksiKamera = await faceapi.detectSingleFace(imgKamera).withFaceLandmarks().withFaceDescriptor();
 
@@ -264,18 +378,13 @@
                     return;
                 }
 
-                // 2. Pencocokan dengan Foto Profil Acuan (jika tersedia di database)
                 if (fotoAcuanPegawai && fotoAcuanPegawai.trim() !== "" && fotoAcuanPegawai !== "NULL") {
                     try {
                         const imgAcuan = await faceapi.fetchImage(fotoAcuanPegawai);
                         const deteksiAcuan = await faceapi.detectSingleFace(imgAcuan).withFaceLandmarks().withFaceDescriptor();
 
                         if (deteksiAcuan) {
-                            // Hitung jarak Euclidean antara dua vektor wajah
                             const jarak = faceapi.euclideanDistance(deteksiKamera.descriptor, deteksiAcuan.descriptor);
-                            console.log("Jarak Kemiripan AI (Distance):", jarak);
-
-                            // Batas toleransi kemiripan (threshold standar: 0.6)
                             if (jarak > 0.6) {
                                 aiStatus.className = "p-2 bg-red-100 text-red-700 rounded text-center text-xs font-semibold";
                                 aiStatus.innerHTML = "❌ Wajah TIDAK COCOK dengan foto profil pegawai!";
@@ -288,11 +397,9 @@
                     }
                 }
 
-                // Jika lolos semua pemeriksaan AI:
                 aiStatus.className = "p-2 bg-emerald-100 text-emerald-800 rounded text-center text-xs font-semibold";
                 aiStatus.innerHTML = "✅ AI: Wajah Terverifikasi & Cocok! Silakan kirim presensi.";
                 
-                // MUNCULKAN TOMBOL KIRIM
                 document.getElementById('btn-kirim').classList.remove('hidden');
 
             } catch (err) {
