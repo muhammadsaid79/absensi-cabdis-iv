@@ -22,7 +22,7 @@
             </button>
         </div>
 
-        <!-- BAGIAN 2: AREA ABSENSI (KAMERA & GPS) -->
+        <!-- BAGIAN 2: AREA ABSENSI -->
         <div id="absen-section" class="hidden space-y-4">
             <div id="info-pegawai" class="p-3 bg-blue-50 rounded-lg text-xs border border-blue-200 text-slate-700"></div>
 
@@ -37,10 +37,9 @@
             </div>
 
             <button onclick="ambilFoto()" id="btn-foto" class="w-full bg-emerald-600 text-white font-bold py-2.5 px-4 rounded-lg hover:bg-emerald-700 transition text-sm">
-                📸 Tangkap Foto Bersebelahan
+                📸 Tangkap Foto
             </button>
             
-            <!-- TOMBOL KIRIM PRESENSI (BARU) -->
             <button onclick="kirimPresensi()" id="btn-kirim" class="hidden w-full bg-blue-600 text-white font-bold py-2.5 px-4 rounded-lg hover:bg-blue-700 transition text-sm">
                 🚀 Kirim Presensi
             </button>
@@ -66,9 +65,9 @@
         let fotoBase64 = null;
         let videoStream = null;
         
-        // Variabel penyimpan data pegawai
         let namaPegawai = "";
         let sekolahPegawai = "";
+        let fotoAcuanPegawai = "";
 
         async function cekPegawai() {
             const nip = document.getElementById('nip-input').value.trim();
@@ -81,30 +80,54 @@
             btn.innerText = "Mencari data...";
             btn.disabled = true;
 
-            const { data, error } = await db
-                .from('pegawai')
-                .select('nip, name, school_name')
-                .eq('nip', nip)
-                .single();
+            // 1. CEK DAHULU DI LOCAL STORAGE BROWSER (HEMAT BANDWIDTH SUPABASE)
+            const cacheFoto = localStorage.getItem(`foto_acuan_${nip}`);
+            const cacheNama = localStorage.getItem(`nama_${nip}`);
+            const cacheSekolah = localStorage.getItem(`sekolah_${nip}`);
+
+            if (cacheFoto && cacheNama && cacheSekolah) {
+                // Mengambil dari Local Storage perangkat
+                namaPegawai = cacheNama;
+                sekolahPegawai = cacheSekolah;
+                fotoAcuanPegawai = cacheFoto;
+                console.log("Data pegawai dimuat dari Local Storage HP/PC (0 KB Bandwidth).");
+            } else {
+                // 2. JIKA BELUM ADA DI LOCAL STORAGE, AMBIL DARI SUPABASE
+                const { data, error } = await db
+                    .from('pegawai')
+                    .select('nip, name, school_name, foto_url')
+                    .eq('nip', nip)
+                    .single();
+
+                if (error || !data) {
+                    alert("Pegawai dengan NIP tersebut tidak ditemukan!");
+                    btn.innerText = "Cari Data Pegawai";
+                    btn.disabled = false;
+                    return;
+                }
+
+                namaPegawai = data.name;
+                sekolahPegawai = data.school_name;
+                fotoAcuanPegawai = data.foto_url || "";
+
+                // Simpan ke Local Storage untuk penggunaan hari-hari berikutnya
+                localStorage.setItem(`nama_${nip}`, namaPegawai);
+                localStorage.setItem(`sekolah_${nip}`, sekolahPegawai);
+                if (fotoAcuanPegawai) {
+                    localStorage.setItem(`foto_acuan_${nip}`, fotoAcuanPegawai);
+                }
+                console.log("Data dimuat dari Supabase & disimpan ke Local Storage.");
+            }
 
             btn.innerText = "Cari Data Pegawai";
             btn.disabled = false;
-
-            if (error || !data) {
-                alert("Pegawai dengan NIP tersebut tidak ditemukan!");
-                return;
-            }
-            
-            // Simpan nama dan sekolah untuk dikirim ke tabel absensi nanti
-            namaPegawai = data.name;
-            sekolahPegawai = data.school_name;
 
             document.getElementById('login-section').classList.add('hidden');
             document.getElementById('absen-section').classList.remove('hidden');
             
             document.getElementById('info-pegawai').innerHTML = `
-                👤 <strong>Nama:</strong> ${data.name} <br>
-                🏫 <strong>Unit Kerja:</strong> ${data.school_name}
+                👤 <strong>Nama:</strong> ${namaPegawai} <br>
+                🏫 <strong>Unit Kerja:</strong> ${sekolahPegawai}
             `;
 
             aktifkanKamera();
@@ -136,12 +159,10 @@
                         `;
                     },
                     (error) => {
-                        document.getElementById('gps-status').innerHTML = `<span class="text-red-600 font-bold">Gagal mendeteksi GPS. Pastikan Lokasi/GPS HP Aktif!</span>`;
+                        document.getElementById('gps-status').innerHTML = `<span class="text-red-600 font-bold">Gagal mendeteksi GPS. Aktifkan GPS HP!</span>`;
                     },
                     { enableHighAccuracy: true }
                 );
-            } else {
-                document.getElementById('gps-status').innerText = "Browser tidak mendukung GPS.";
             }
         }
 
@@ -165,7 +186,7 @@
             document.getElementById('btn-foto').classList.add('hidden');
             document.getElementById('btn-ulang').classList.remove('hidden');
             
-            // Munculkan tombol kirim setelah foto diambil
+            // Tombol Kirim Muncul
             document.getElementById('btn-kirim').classList.remove('hidden'); 
         }
 
@@ -193,7 +214,6 @@
             ulangFoto();
         }
 
-        // FUNGSI BARU: MENGIRIM PRESENSI KE SUPABASE
         async function kirimPresensi() {
             const nip = document.getElementById('nip-input').value.trim();
             const btnKirim = document.getElementById('btn-kirim');
@@ -205,7 +225,6 @@
             const tglSekarang = sekarang.toISOString().split('T')[0];
             const jamSekarang = sekarang.toTimeString().split(' ')[0];
 
-            // Menyisipkan ke tabel absensi
             const { error } = await db.from('absensi').insert([{
                 nip: nip,
                 nama: namaPegawai,
@@ -217,11 +236,11 @@
             }]);
 
             if (error) {
-                alert("Gagal mengirim presensi! Sistem menolak: " + error.message);
+                alert("Gagal mengirim presensi: " + error.message);
                 btnKirim.innerText = "🚀 Kirim Presensi";
                 btnKirim.disabled = false;
             } else {
-                alert("✅ Presensi Berhasil Dikirim dan Tersimpan!");
+                alert("✅ Presensi Berhasil Dikirim!");
                 lokasiAwal();
             }
         }
