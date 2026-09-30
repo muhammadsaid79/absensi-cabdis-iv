@@ -24,7 +24,7 @@
             <button onclick="bukaModalKunci()" class="text-[10px] bg-slate-200 hover:bg-slate-300 px-2 py-1 rounded text-slate-700 ml-2">⚙️ Atur PC</button>
         </div>
 
-        <!-- LAYAR TERKUNCI (JIKA PC BELUM TERDAFTAR) -->
+        <!-- LAYAR TERKUNCI (JIKA PC BELUM TERDAFTAR ATAU DICABUT) -->
         <div id="locked-section" class="hidden text-center py-6">
             <div class="text-4xl mb-2">🔒</div>
             <h2 class="text-base font-bold text-gray-800 mb-1">Perangkat Belum Terverifikasi</h2>
@@ -121,7 +121,7 @@
         let isAiLoaded = false;
         const MODEL_URL = 'https://cdn.jsdelivr.net/gh/justadudewhohacks/face-api.js@0.22.2/weights';
 
-        // 1. VERIFIKASI PERANGKAT SAAT PERTAMA KALI MEMUAT WEB
+        // 1. VERIFIKASI PERANGKAT TERDAFTAR & CEK REALTIME KUNCI SUPABASE
         async function verifikasiPerangkat() {
             const statusBox = document.getElementById('device-status-box');
             const statusText = document.getElementById('device-status-text');
@@ -139,24 +139,25 @@
                 return;
             }
 
-            // Cek ke Database Supabase
+            // Cek apakah kunci masih valid di Supabase (jika dihapus Superadmin dari Streamlit, akan bernilai error/null)
             const { data, error } = await db
                 .from('kunci_perangkat')
-                .select('sekolah')
+                .select('sekolah, status')
                 .eq('kunci', savedKey)
                 .single();
 
             if (error || !data) {
+                // Kunci telah dihapus oleh Superadmin
                 localStorage.removeItem('kunci_perangkat_sekolah');
                 sekolahPerangkatTerdaftar = null;
                 statusBox.className = "mb-4 p-2.5 bg-red-50 border border-red-200 rounded-lg text-center text-xs font-semibold text-red-800 flex items-center justify-between";
-                statusText.innerHTML = "❌ Kunci Perangkat Tidak Valid";
+                statusText.innerHTML = "❌ Akses PC Dicabut oleh Superadmin";
                 loginSection.classList.add('hidden');
                 lockedSection.classList.remove('hidden');
             } else {
                 sekolahPerangkatTerdaftar = data.sekolah;
                 statusBox.className = "mb-4 p-2.5 bg-emerald-50 border border-emerald-200 rounded-lg text-center text-xs font-semibold text-emerald-800 flex items-center justify-between";
-                statusText.innerHTML = `💻 Perangkat Resmi: <strong>${sekolahPerangkatTerdaftar}</strong>`;
+                statusText.innerHTML = `💻 PC Resmi (${savedKey}): <strong>${sekolahPerangkatTerdaftar}</strong>`;
                 lockedSection.classList.add('hidden');
                 loginSection.classList.remove('hidden');
             }
@@ -170,27 +171,51 @@
             document.getElementById('modal-kunci').classList.add('hidden');
         }
 
+        // 2. PROSES REGISTRASI KUNCI SEKALI PAKAI (ONE-TIME USE)
         async function simpanKunciPerangkat() {
-            const inputKunci = document.getElementById('kunci-input').value.trim();
+            const inputKunci = document.getElementById('kunci-input').value.trim().toUpperCase();
             if (!inputKunci) {
                 alert("Masukkan kunci perangkat terlebih dahulu!");
                 return;
             }
 
+            // Cek ketersediaan kunci di Supabase
             const { data, error } = await db
                 .from('kunci_perangkat')
-                .select('sekolah')
+                .select('*')
                 .eq('kunci', inputKunci)
                 .single();
 
             if (error || !data) {
-                alert("❌ Kunci perangkat tidak ditemukan atau salah!");
-            } else {
-                localStorage.setItem('kunci_perangkat_sekolah', inputKunci);
-                alert(`✅ Berhasil! PC ini telah terdaftar sebagai PC Resmi untuk: ${data.sekolah}`);
-                tutupModalKunci();
-                await verifikasiPerangkat();
+                alert("❌ Kunci perangkat tidak valid atau tidak ditemukan!");
+                return;
             }
+
+            // Proteksi Kunci Sekali Pakai: Jika kunci sudah pernah terpakai di PC lain
+            if (data.status === 'TERPAKAI') {
+                alert("⚠️ Kunci ini SUDAH TERPAKAI di PC lain!\n\nSatu kunci hanya untuk 1 PC. Silakan gunakan kode kunci PC lainnya yang diberikan oleh Superadmin.");
+                return;
+            }
+
+            // Tandai kunci sebagai TERPAKAI di Supabase
+            const { error: updateError } = await db
+                .from('kunci_perangkat')
+                .update({ 
+                    status: 'TERPAKAI', 
+                    registered_at: new Date().toISOString() 
+                })
+                .eq('kunci', inputKunci);
+
+            if (updateError) {
+                alert("❌ Gagal mendaftarkan PC: " + updateError.message);
+                return;
+            }
+
+            // Simpan kunci ke LocalStorage browser PC ini
+            localStorage.setItem('kunci_perangkat_sekolah', inputKunci);
+            alert(`✅ Berhasil! PC ini resmi terdaftar sebagai ${inputKunci} untuk unit kerja: ${data.sekolah}`);
+            tutupModalKunci();
+            await verifikasiPerangkat();
         }
 
         // MEMUAT MODEL AI SAAT HALAMAN DIMUAT
