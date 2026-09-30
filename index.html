@@ -6,8 +6,8 @@
     <title>Portal Presensi Pegawai</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-    <!-- MODUL AI FACE DETECTION & RECOGNITION -->
-    <script src="https://cdn.jsdelivr.net/npm/@vladmandic/face-api/dist/face-api.js"></script>
+    <!-- MODUL AI FACE DETECTION & RECOGNITION (VERSI STABIL) -->
+    <script defer src="https://cdn.jsdelivr.net/npm/face-api.js@0.22.2/dist/face-api.min.js"></script>
 </head>
 <body class="bg-slate-100 min-h-screen flex items-center justify-center p-4 font-sans">
     <div class="bg-white p-6 rounded-xl shadow-lg w-full max-w-md border border-slate-200">
@@ -85,7 +85,7 @@
 
         // VARIABEL MODEL AI
         let isAiLoaded = false;
-        const MODEL_URL = 'https://cdn.jsdelivr.net/npm/@vladmandic/face-api/model/';
+        const MODEL_URL = 'https://cdn.jsdelivr.net/gh/justadudewhohacks/face-api.js@0.22.2/weights';
 
         // MEMUAT MODEL AI SAAT HALAMAN DIMUAT
         async function muatModelAI() {
@@ -93,7 +93,7 @@
             try {
                 if (aiStatus) aiStatus.innerHTML = "🤖 AI: Memuat modul kecerdasan buatan...";
                 await faceapi.nets.ssdMobilenetv1.loadFromUri(MODEL_URL);
-                await faceapi.nets.faceLandmark64Net.loadFromUri(MODEL_URL);
+                await faceapi.nets.faceLandmark68Net.loadFromUri(MODEL_URL); // Diperbaiki dari 64Net ke 68Net
                 await faceapi.nets.faceRecognitionNet.loadFromUri(MODEL_URL);
                 isAiLoaded = true;
                 if (aiStatus) {
