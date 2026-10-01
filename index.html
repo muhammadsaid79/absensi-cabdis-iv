@@ -77,7 +77,7 @@
                 🔄 Foto Ulang
             </button>
             
-            <!-- TOMBOL PRESENSI DATANG DAN PULANG (MUNCUL JIKA LOLOS VERIFIKASI AI) -->
+            <!-- TOMBOL PRESENSI DATANG DAN PULANG -->
             <div id="btn-kirim-container" class="hidden grid grid-cols-2 gap-2">
                 <button onclick="kirimPresensi('DATANG')" id="btn-datang" class="w-full bg-emerald-600 text-white font-bold py-2.5 px-2 rounded-lg hover:bg-emerald-700 transition text-xs sm:text-sm flex items-center justify-center gap-1">
                     📥 Absen DATANG
@@ -126,7 +126,7 @@
         let isAiLoaded = false;
         const MODEL_URL = 'https://cdn.jsdelivr.net/gh/justadudewhohacks/face-api.js@0.22.2/weights';
 
-        // 1. VERIFIKASI PERANGKAT TERDAFTAR & CEK REALTIME KUNCI SUPABASE
+        // 1. VERIFIKASI PERANGKAT TERDAFTAR
         async function verifikasiPerangkat() {
             const statusBox = document.getElementById('device-status-box');
             const statusText = document.getElementById('device-status-text');
@@ -174,7 +174,7 @@
             document.getElementById('modal-kunci').classList.add('hidden');
         }
 
-        // 2. PROSES REGISTRASI KUNCI SEKALI PAKAI
+        // 2. REGISTRASI KUNCI PERANGKAT
         async function simpanKunciPerangkat() {
             const inputKunci = document.getElementById('kunci-input').value.trim().toUpperCase();
             if (!inputKunci) {
@@ -217,7 +217,7 @@
             await verifikasiPerangkat();
         }
 
-        // MEMUAT MODEL AI SAAT HALAMAN DIMUAT
+        // MEMUAT MODEL AI
         async function muatModelAI() {
             const aiStatus = document.getElementById('ai-status');
             try {
@@ -244,6 +244,7 @@
             await muatModelAI();
         });
 
+        // 3. PENCARIAN PEGAWAI + OPTIMASI MEMORI LOKAL (HEMAT EGRESS)
         async function cekPegawai() {
             if (!sekolahPerangkatTerdaftar) {
                 alert("🔒 Akses Ditolak! PC ini belum terdaftar sebagai PC Resmi Sekolah.");
@@ -260,15 +261,18 @@
             btn.innerText = "Mencari data...";
             btn.disabled = true;
 
-            const cacheFoto = localStorage.getItem(`foto_acuan_${nip}`);
+            // CEK DARI MEMORI LOKAL TERLEBIH DAHULU (0 BYTE EGRESS)
             const cacheNama = localStorage.getItem(`nama_${nip}`);
             const cacheSekolah = localStorage.getItem(`sekolah_${nip}`);
+            const cacheFoto = localStorage.getItem(`foto_acuan_${nip}`);
 
-            if (cacheFoto && cacheNama && cacheSekolah) {
+            if (cacheNama && cacheSekolah && cacheFoto !== null) {
+                // DATA DIAMBIL DARI MEMORI PERANGKAT
                 namaPegawai = cacheNama;
                 sekolahPegawai = cacheSekolah;
-                fotoAcuanPegawai = cacheFoto;
+                fotoAcuanPegawai = (cacheFoto === "KOSONG") ? "" : cacheFoto;
             } else {
+                // JIKA BELUM ADA DI MEMORI, AMBIL DARI SUPABASE 1X SAJA
                 const { data, error } = await db
                     .from('pegawai')
                     .select('nip, name, school_name, photo_base64')
@@ -286,11 +290,21 @@
                 sekolahPegawai = data.school_name;
                 fotoAcuanPegawai = data.photo_base64 || "";
 
+                // SIMPAN KE MEMORI LOKAL
                 localStorage.setItem(`nama_${nip}`, namaPegawai);
                 localStorage.setItem(`sekolah_${nip}`, sekolahPegawai);
-                if (fotoAcuanPegawai) localStorage.setItem(`foto_acuan_${nip}`, fotoAcuanPegawai);
+                localStorage.setItem(`foto_acuan_${nip}`, fotoAcuanPegawai.trim() !== "" ? fotoAcuanPegawai : "KOSONG");
             }
 
+            // BLOKIR KAMERA JIKA FOTO BELUM DIUPLOAD
+            if (!fotoAcuanPegawai || fotoAcuanPegawai.trim() === "" || fotoAcuanPegawai === "KOSONG" || fotoAcuanPegawai === "NULL") {
+                alert("FOTO BELUM DIUPLOAD ADMIN SEKOLAH JIKA SUDAH DIUPLOAD KAMERA TETAP TERTUTUP HUB ADMIN CABANG (MOCHD GAZALI/JEDDAH/GAZA)");
+                btn.innerText = "Cari Data Pegawai";
+                btn.disabled = false;
+                return; // PROSES BERHENTI, KAMERA TIDAK TERBUKA!
+            }
+
+            // CEK UNIT KERJA SEKOLAH
             if (sekolahPegawai.trim().toLowerCase() !== sekolahPerangkatTerdaftar.trim().toLowerCase()) {
                 alert(`🚫 Akses Ditolak!\n\nAnda terdaftar di unit kerja "${sekolahPegawai}", sedangkan PC ini dikunci untuk "${sekolahPerangkatTerdaftar}". Silakan presensi di PC Sekolah Anda!`);
                 btn.innerText = "Cari Data Pegawai";
@@ -313,6 +327,7 @@
             dapatkanGPS();
         }
 
+        // HAPUS MEMORI LOKAL NIP INI (MEMAKSA SUPABASE MENGAMBIL FOTO BARU)
         async function segarkanData() {
             const nip = document.getElementById('nip-input').value.trim();
             if (!nip) return;
@@ -321,7 +336,7 @@
             localStorage.removeItem(`sekolah_${nip}`);
             localStorage.removeItem(`foto_acuan_${nip}`);
 
-            alert("Memori lokal dibersihkan! Sistem akan mengambil data & foto profil terbaru dari database.");
+            alert("Memori lokal dibersihkan! Sistem akan mengambil data & foto profil terbaru dari database Supabase.");
             await cekPegawai();
         }
 
@@ -357,7 +372,7 @@
             }
         }
 
-        // FUNGSI TANGKAP FOTO & VERIFIKASI WAJAH DENGAN AI
+        // TANGKAP FOTO & COCOKKAN DENGAN FOTO LOKAL PEGAWAI
         async function ambilFoto() {
             const video = document.getElementById('webcam');
             const canvas = document.getElementById('canvas');
@@ -401,23 +416,28 @@
                     return;
                 }
 
-                if (fotoAcuanPegawai && fotoAcuanPegawai.trim() !== "" && fotoAcuanPegawai !== "NULL") {
-                    try {
-                        const imgAcuan = await faceapi.fetchImage(fotoAcuanPegawai);
-                        const deteksiAcuan = await faceapi.detectSingleFace(imgAcuan).withFaceLandmarks().withFaceDescriptor();
+                if (!fotoAcuanPegawai || fotoAcuanPegawai.trim() === "" || fotoAcuanPegawai === "KOSONG" || fotoAcuanPegawai === "NULL") {
+                    aiStatus.className = "p-2 bg-red-100 text-red-700 rounded text-center text-xs font-semibold";
+                    aiStatus.innerHTML = "❌ Wajah TIDAK COCOK (Foto Acuan Kosong)!";
+                    alert("FOTO BELUM DIUPLOAD ADMIN SEKOLAH JIKA SUDAH DIUPLOAD KAMERA TETAP TERTUTUP HUB ADMIN CABANG (MOCHD GAZALI/JEDDAH/GAZA)");
+                    return; 
+                }
 
-                        if (deteksiAcuan) {
-                            const jarak = faceapi.euclideanDistance(deteksiKamera.descriptor, deteksiAcuan.descriptor);
-                            if (jarak > 0.6) {
-                                aiStatus.className = "p-2 bg-red-100 text-red-700 rounded text-center text-xs font-semibold";
-                                aiStatus.innerHTML = "❌ Wajah TIDAK COCOK dengan foto profil pegawai!";
-                                alert("❌ Wajah Anda tidak cocok dengan foto profil pegawai yang terdaftar!");
-                                return;
-                            }
+                try {
+                    const imgAcuan = await faceapi.fetchImage(fotoAcuanPegawai);
+                    const deteksiAcuan = await faceapi.detectSingleFace(imgAcuan).withFaceLandmarks().withFaceDescriptor();
+
+                    if (deteksiAcuan) {
+                        const jarak = faceapi.euclideanDistance(deteksiKamera.descriptor, deteksiAcuan.descriptor);
+                        if (jarak > 0.6) {
+                            aiStatus.className = "p-2 bg-red-100 text-red-700 rounded text-center text-xs font-semibold";
+                            aiStatus.innerHTML = "❌ Wajah TIDAK COCOK dengan foto profil pegawai!";
+                            alert("❌ Wajah Anda tidak cocok dengan foto profil pegawai yang terdaftar!");
+                            return;
                         }
-                    } catch (e) {
-                        console.warn("Gagal memuat foto acuan untuk komparasi:", e);
                     }
+                } catch (e) {
+                    console.warn("Gagal memuat foto acuan untuk komparasi:", e);
                 }
 
                 aiStatus.className = "p-2 bg-emerald-100 text-emerald-800 rounded text-center text-xs font-semibold";
@@ -464,7 +484,7 @@
             ulangFoto();
         }
 
-        // FUNGSI KIRIM PRESENSI DENGAN STATUS DATANG / PULANG
+        // KIRIM DATANG / PULANG
         async function kirimPresensi(jenisStatus) {
             const nip = document.getElementById('nip-input').value.trim();
             const btnDatang = document.getElementById('btn-datang');
@@ -483,7 +503,7 @@
                 sekolah: sekolahPegawai,
                 tanggal: tglSekarang,
                 jam: jamSekarang,
-                status: jenisStatus, // 'DATANG' atau 'PULANG'
+                status: jenisStatus,
                 jarak_m: "0",
                 foto_bukti: fotoBase64 || null
             }]);
@@ -498,7 +518,7 @@
             }
         }
 
-        // PROTEKSI HALAMAN (KEAMANAN BROWSER)
+        // PROTEKSI HALAMAN
         document.addEventListener('contextmenu', function(e) {
             e.preventDefault();
         });
