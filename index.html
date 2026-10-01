@@ -10,7 +10,7 @@
     
     <script src="https://cdn.tailwindcss.com"></script>
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-    <!-- MODUL AI FACE DETECTION & RECOGNITION (VERSI STABIL) -->
+    <!-- MODUL AI FACE DETECTION & RECOGNITION -->
     <script defer src="https://cdn.jsdelivr.net/npm/face-api.js@0.22.2/dist/face-api.min.js"></script>
 </head>
 <body class="bg-slate-100 min-h-screen flex items-center justify-center p-4 font-sans">
@@ -77,10 +77,15 @@
                 🔄 Foto Ulang
             </button>
             
-            <!-- Tombol Kirim hanya muncul jika lolos Verifikasi AI -->
-            <button onclick="kirimPresensi()" id="btn-kirim" class="hidden w-full bg-blue-600 text-white font-bold py-2.5 px-4 rounded-lg hover:bg-blue-700 transition text-sm">
-                🚀 Kirim Presensi
-            </button>
+            <!-- TOMBOL PRESENSI DATANG DAN PULANG (MUNCUL JIKA LOLOS VERIFIKASI AI) -->
+            <div id="btn-kirim-container" class="hidden grid grid-cols-2 gap-2">
+                <button onclick="kirimPresensi('DATANG')" id="btn-datang" class="w-full bg-emerald-600 text-white font-bold py-2.5 px-2 rounded-lg hover:bg-emerald-700 transition text-xs sm:text-sm flex items-center justify-center gap-1">
+                    📥 Absen DATANG
+                </button>
+                <button onclick="kirimPresensi('PULANG')" id="btn-pulang" class="w-full bg-amber-600 text-white font-bold py-2.5 px-2 rounded-lg hover:bg-amber-700 transition text-xs sm:text-sm flex items-center justify-center gap-1">
+                    📤 Absen PULANG
+                </button>
+            </div>
 
             <button onclick="lokasiAwal()" class="w-full bg-gray-200 text-gray-700 font-semibold py-2 px-4 rounded-lg hover:bg-gray-300 transition text-xs">
                 ⬅️ Batal / Cari NIP Lain
@@ -139,7 +144,6 @@
                 return;
             }
 
-            // Cek apakah kunci masih valid di Supabase (jika dihapus Superadmin dari Streamlit, akan bernilai error/null)
             const { data, error } = await db
                 .from('kunci_perangkat')
                 .select('sekolah, status')
@@ -147,7 +151,6 @@
                 .single();
 
             if (error || !data) {
-                // Kunci telah dihapus oleh Superadmin
                 localStorage.removeItem('kunci_perangkat_sekolah');
                 sekolahPerangkatTerdaftar = null;
                 statusBox.className = "mb-4 p-2.5 bg-red-50 border border-red-200 rounded-lg text-center text-xs font-semibold text-red-800 flex items-center justify-between";
@@ -171,7 +174,7 @@
             document.getElementById('modal-kunci').classList.add('hidden');
         }
 
-        // 2. PROSES REGISTRASI KUNCI SEKALI PAKAI (ONE-TIME USE)
+        // 2. PROSES REGISTRASI KUNCI SEKALI PAKAI
         async function simpanKunciPerangkat() {
             const inputKunci = document.getElementById('kunci-input').value.trim().toUpperCase();
             if (!inputKunci) {
@@ -179,7 +182,6 @@
                 return;
             }
 
-            // Cek ketersediaan kunci di Supabase
             const { data, error } = await db
                 .from('kunci_perangkat')
                 .select('*')
@@ -191,13 +193,11 @@
                 return;
             }
 
-            // Proteksi Kunci Sekali Pakai: Jika kunci sudah pernah terpakai di PC lain
             if (data.status === 'TERPAKAI') {
                 alert("⚠️ Kunci ini SUDAH TERPAKAI di PC lain!\n\nSatu kunci hanya untuk 1 PC. Silakan gunakan kode kunci PC lainnya yang diberikan oleh Superadmin.");
                 return;
             }
 
-            // Tandai kunci sebagai TERPAKAI di Supabase
             const { error: updateError } = await db
                 .from('kunci_perangkat')
                 .update({ 
@@ -211,7 +211,6 @@
                 return;
             }
 
-            // Simpan kunci ke LocalStorage browser PC ini
             localStorage.setItem('kunci_perangkat_sekolah', inputKunci);
             alert(`✅ Berhasil! PC ini resmi terdaftar sebagai ${inputKunci} untuk unit kerja: ${data.sekolah}`);
             tutupModalKunci();
@@ -292,7 +291,6 @@
                 if (fotoAcuanPegawai) localStorage.setItem(`foto_acuan_${nip}`, fotoAcuanPegawai);
             }
 
-            // COCOKKAN UNIT KERJA PEGAWAI DENGAN LOKASI PC
             if (sekolahPegawai.trim().toLowerCase() !== sekolahPerangkatTerdaftar.trim().toLowerCase()) {
                 alert(`🚫 Akses Ditolak!\n\nAnda terdaftar di unit kerja "${sekolahPegawai}", sedangkan PC ini dikunci untuk "${sekolahPerangkatTerdaftar}". Silakan presensi di PC Sekolah Anda!`);
                 btn.innerText = "Cari Data Pegawai";
@@ -352,7 +350,7 @@
                         `;
                     },
                     (error) => {
-                        document.getElementById('gps-status').innerHTML = `<span class="text-red-600 font-bold">Gagal mendeteksi GPS. Aktifkan GPS HP!</span>`;
+                        document.getElementById('gps-status').innerHTML = `<span class="text-red-600 font-bold">Gagal mendeteksi GPS. Aktifkan GPS HP/PC!</span>`;
                     },
                     { enableHighAccuracy: true }
                 );
@@ -381,7 +379,7 @@
 
             btnFoto.classList.add('hidden');
             document.getElementById('btn-ulang').classList.remove('hidden');
-            document.getElementById('btn-kirim').classList.add('hidden');
+            document.getElementById('btn-kirim-container').classList.add('hidden');
 
             if (!isAiLoaded) {
                 aiStatus.className = "p-2 bg-amber-100 text-amber-800 rounded text-center text-xs font-semibold";
@@ -423,9 +421,10 @@
                 }
 
                 aiStatus.className = "p-2 bg-emerald-100 text-emerald-800 rounded text-center text-xs font-semibold";
-                aiStatus.innerHTML = "✅ AI: Wajah Terverifikasi & Cocok! Silakan kirim presensi.";
+                aiStatus.innerHTML = "✅ AI: Wajah Terverifikasi! Pilih jenis presensi di bawah ini:";
                 
-                document.getElementById('btn-kirim').classList.remove('hidden');
+                // TAMPILKAN TOMBOL DATANG & PULANG
+                document.getElementById('btn-kirim-container').classList.remove('hidden');
 
             } catch (err) {
                 console.error("Error Verifikasi AI:", err);
@@ -445,7 +444,7 @@
 
             document.getElementById('btn-foto').classList.remove('hidden');
             document.getElementById('btn-ulang').classList.add('hidden');
-            document.getElementById('btn-kirim').classList.add('hidden'); 
+            document.getElementById('btn-kirim-container').classList.add('hidden'); 
             
             fotoBase64 = null;
             if (aiStatus) {
@@ -460,17 +459,19 @@
             }
             document.getElementById('absen-section').classList.add('hidden');
             document.getElementById('login-section').classList.remove('hidden');
-            document.getElementById('btn-kirim').classList.add('hidden'); 
+            document.getElementById('btn-kirim-container').classList.add('hidden'); 
             document.getElementById('nip-input').value = '';
             ulangFoto();
         }
 
-        async function kirimPresensi() {
+        // FUNGSI KIRIM PRESENSI DENGAN STATUS DATANG / PULANG
+        async function kirimPresensi(jenisStatus) {
             const nip = document.getElementById('nip-input').value.trim();
-            const btnKirim = document.getElementById('btn-kirim');
+            const btnDatang = document.getElementById('btn-datang');
+            const btnPulang = document.getElementById('btn-pulang');
             
-            btnKirim.innerText = "Mengirim Data...";
-            btnKirim.disabled = true;
+            btnDatang.disabled = true;
+            btnPulang.disabled = true;
 
             const sekarang = new Date();
             const tglSekarang = sekarang.toISOString().split('T')[0];
@@ -482,47 +483,40 @@
                 sekolah: sekolahPegawai,
                 tanggal: tglSekarang,
                 jam: jamSekarang,
-                status: "Hadir (Web HTML)",
-                jarak_m: "0"
+                status: jenisStatus, // 'DATANG' atau 'PULANG'
+                jarak_m: "0",
+                foto_bukti: fotoBase64 || null
             }]);
 
             if (error) {
                 alert("Gagal mengirim presensi: " + error.message);
-                btnKirim.innerText = "🚀 Kirim Presensi";
-                btnKirim.disabled = false;
+                btnDatang.disabled = false;
+                btnPulang.disabled = false;
             } else {
-                alert("✅ Presensi Berhasil Dikirim!");
+                alert(`✅ Presensi ${jenisStatus} Berhasil Dikirim!`);
                 lokasiAwal();
             }
         }
-    </script> <!-- TAMBAHKAN TAG PENUTUP INI DI SINI -->
 
-    <script>
-      // 1. Matikan Klik Kanan
-      document.addEventListener('contextmenu', function(e) {
-        e.preventDefault();
-      });
+        // PROTEKSI HALAMAN (KEAMANAN BROWSER)
+        document.addEventListener('contextmenu', function(e) {
+            e.preventDefault();
+        });
 
-      // 2. Matikan F12, Ctrl+Shift+I, Ctrl+Shift+J, Ctrl+Shift+C, dan Ctrl+U
-      document.addEventListener('keydown', function(e) {
-        // Tombol F12
-        if (e.key === 'F12' || e.keyCode === 123) {
-          e.preventDefault();
-          return false;
-        }
-        
-        // Ctrl + Shift + I (Inspect) / J (Console) / C (Select Element)
-        if (e.ctrlKey && e.shiftKey && (e.key === 'I' || e.key === 'i' || e.key === 'J' || e.key === 'j' || e.key === 'C' || e.key === 'c')) {
-          e.preventDefault();
-          return false;
-        }
-
-        // Ctrl + U (View Source)
-        if (e.ctrlKey && (e.key === 'u' || e.key === 'U')) {
-          e.preventDefault();
-          return false;
-        }
-      });
+        document.addEventListener('keydown', function(e) {
+            if (e.key === 'F12' || e.keyCode === 123) {
+                e.preventDefault();
+                return false;
+            }
+            if (e.ctrlKey && e.shiftKey && (e.key === 'I' || e.key === 'i' || e.key === 'J' || e.key === 'j' || e.key === 'C' || e.key === 'c')) {
+                e.preventDefault();
+                return false;
+            }
+            if (e.ctrlKey && (e.key === 'u' || e.key === 'U')) {
+                e.preventDefault();
+                return false;
+            }
+        });
     </script>
 </body>
 </html>
