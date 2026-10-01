@@ -9,16 +9,13 @@ import hmac
 import hashlib
 import calendar
 import datetime
-import base64
 import pytz
 
 import pandas as pd
 import streamlit as st
 import streamlit.components.v1 as components
 import extra_streamlit_components as stx
-import geopy.distance
 from PIL import Image
-from streamlit_js_eval import get_geolocation
 from dotenv import load_dotenv
 from supabase import create_client, Client
 
@@ -176,7 +173,7 @@ def get_data_pengaturan():
     except:
         return pd.DataFrame([{'batas_masuk': '07:30', 'batas_pulang': '16:00'}])
 
-# Helper Rekap Absensi untuk Menghindari Duplikasi Kode
+# Helper Rekap Absensi
 def proses_rekap_absensi(nama_sekolah, start_month, start_year, end_month, end_year, bulan_list):
     month_map = {m: i+1 for i, m in enumerate(bulan_list)}
     start_d = f"{start_year}-{month_map[start_month]:02d}-01"
@@ -231,7 +228,8 @@ for key_state, val in {
     'last_checked_nip_dash': None,
     'last_searched_school_pc': None,
     'menu_unlocked': False,
-    'edit_nip_target': None
+    'edit_nip_target': None,
+    'show_photo_nip': None
 }.items():
     if key_state not in st.session_state: st.session_state[key_state] = val
 
@@ -246,8 +244,9 @@ if st.session_state.role is not None:
 elif st.session_state.logout_triggered:
     if raw_token is None: st.session_state.logout_triggered = False 
 else:
-    if valid_role: st.session_state.role = valid_role
-    elif raw_token and not valid_role:
+    if valid_role and valid_role != "Pegawai": 
+        st.session_state.role = valid_role
+    elif raw_token and (not valid_role or valid_role == "Pegawai"):
         st.session_state.role = None
         try:
             cookie_manager.delete("auth_token", key="del_auth_invalid_role")
@@ -261,38 +260,30 @@ def logout():
     st.session_state.wajah_terverifikasi = False 
     st.session_state.menu_unlocked = False
     st.session_state.edit_nip_target = None
+    st.session_state.show_photo_nip = None
     
-    # --- TAMBAHAN KODE UNTUK MERESET PENCARIAN & MENCEGAH EGRESS ---
     st.session_state.last_searched_nip_foto = None
     st.session_state.last_checked_nip_dash = None
     st.session_state.last_searched_school_pc = None
-    # ---------------------------------------------------------------
     
     try:
         cookie_manager.delete("auth_token", key="delete_auth_token_btn")
         cookie_manager.delete("role", key="delete_role_btn") 
         cookie_manager.delete("admin_sekolah", key="delete_admin_sekolah_btn") 
     except: pass
+
 # ==========================================
-# HALAMAN LOGIN UTAMA
+# HALAMAN LOGIN UTAMA (KHUSUS ADMIN & SUPERADMIN)
 # ==========================================
 if st.session_state.role is None:
-    st.title("📍 Portal Presensi Sekolah CABDIS WIL IV")
-    st.info("Selamat datang! Untuk merekam kehadiran Anda, silakan klik tombol di bawah ini.")
+    st.title("📍 Portal Pengelola Presensi CABDIS WIL IV")
+    st.info("Selamat datang! Silakan masuk ke akun pengelola sistem di bawah ini.")
 
-    if st.button("📸 Mulai Presensi Wajah & GPS", type="primary", use_container_width=True, key="btn_login_pegawai_main"):
-        st.session_state.role = "Pegawai"
-        st.session_state.wajah_terverifikasi = False
-        cookie_manager.set("auth_token", generate_signed_token("Pegawai"), key="set_token_login_pegawai")
-        time.sleep(0.5)
-        st.rerun()
-
-    st.write("---")
-    st.caption("Akses khusus Pengelola Sistem:")
+    st.caption("Akses Pengelola Sistem:")
     col_admin, col_super = st.columns(2)
 
     with col_admin:
-        with st.expander("🔑 Login Admin"):
+        with st.expander("🔑 Login Admin Sekolah", expanded=True):
             input_user_admin = st.text_input("Username Admin:", key="user_admin_main")
             pwd = st.text_input("Password Admin:", type="password", key="pwd_admin_main")
             if st.button("Masuk Admin", use_container_width=True, key="btn_admin_main"):
@@ -314,7 +305,7 @@ if st.session_state.role is None:
                 else: st.error("Username atau Password Salah!")
 
     with col_super:
-        with st.expander("🛠️ Login Superadmin"):
+        with st.expander("🛠️ Login Superadmin", expanded=True):
             pwd_super = st.text_input("Password Superadmin:", type="password", key="pwd_super_main")
             if st.button("Masuk Superadmin", use_container_width=True, key="btn_super_main"):
                 if pwd_super == SUPERADMIN_PASSWORD:
@@ -336,178 +327,12 @@ st.sidebar.write("---")
 waktu_sekarang = datetime.datetime.now(pytz.timezone('Asia/Makassar'))
 st.sidebar.markdown("**Waktu Server (WITA):**")
 st.sidebar.info(f"🕒 {waktu_sekarang.strftime('%H:%M:%S')} WITA\n\n📅 {waktu_sekarang.strftime('%d-%m-%Y')}")
-st.sidebar.caption("JAM INI YANG AKAN TEREKAM DI ABSENSI BAPK/IBU.")
 st.sidebar.write("---")
 
 # ==========================================
-# HAK AKSES 1: PEGAWAI
+# HAK AKSES 1: ADMIN SEKOLAH
 # ==========================================
-if st.session_state.role == "Pegawai":
-    st.button("⬅️ Kembali ke Halaman Awal", on_click=logout, key="btn_back_pegawai")
-    st.title("📍 Presensi GPS & Wajah")
-    nip_input = st.text_input("SILAHKAN KETIK NIP:", placeholder="Contoh: 198001012005011001", key="nip_input_pegawai")
-    
-    if nip_input.strip():
-        try:
-            res_pegawai = supabase.table('pegawai').select('nip, name, school_name, photo_uploaded, photo_base64, is_cadar').eq('nip', str(nip_input.strip())).execute()
-            df_kandidat = pd.DataFrame(res_pegawai.data) if res_pegawai.data else pd.DataFrame()
-        except: df_kandidat = pd.DataFrame()
-            
-        if df_kandidat.empty:
-            st.warning("⚠️ Data pegawai tidak ditemukan.")
-        else:
-            emp_data = df_kandidat.iloc[0]
-            df_sekolah = get_data_sekolah()
-            try: 
-                sch_data = df_sekolah[df_sekolah['school_name'] == emp_data['school_name']].iloc[0]
-            except:
-                st.error("Data sekolah untuk pegawai ini tidak ditemukan.")
-                st.stop()
-                
-            curr_dev_cookie = cookie_manager.get("school_device_token")
-            try:
-                res_dev_count = supabase.table('perangkat_sekolah').select('id').eq('school_name', sch_data['school_name']).execute()
-                total_terdaftar = len(res_dev_count.data) if res_dev_count.data else 0
-            except: total_terdaftar = 0
-
-            is_valid_pc = False
-            if total_terdaftar > 0:
-                try:
-                    res_valid = supabase.table('perangkat_sekolah').select('id').eq('school_name', sch_data['school_name']).eq('device_id', str(curr_dev_cookie)).execute()
-                    if res_valid.data: is_valid_pc = True
-                except: pass
-                
-                if not is_valid_pc:
-                    st.error("⛔ AKSES DITOLAK! Perangkat ini belum terdaftar sebagai PC Resmi Sekolah.")
-                    st.stop()
-                else: st.success("🖥️ Perangkat Terverifikasi: PC Resmi Sekolah.")
-            else:
-                st.warning("⚠️ Sekolah ini belum mendaftarkan PC Resmi. Presensi di perangkat apapun masih terbuka.")
-                
-            st.info(f"👤 Nama: **{emp_data['name']}**\n\n🏫 Anda ditugaskan di: **{sch_data['school_name']}**")
-            loc = get_geolocation()
-            
-            if loc:
-                user_lat, user_lng = loc['coords']['latitude'], loc['coords']['longitude']
-                jarak_meter = geopy.distance.geodesic((user_lat, user_lng), (sch_data['lat'], sch_data['lng'])).meters
-                
-                if jarak_meter <= sch_data['radius_m']:
-                    st.success(f"✅ Lokasi Valid! Jarak: {jarak_meter:.0f} meter dari pusat.")
-                    
-                    is_uploaded = str(emp_data.get('photo_uploaded', 'False')).lower() == 'true'
-                    is_cadar = str(emp_data.get('is_cadar', 'False')).lower() == 'true'
-                    
-                    if not is_cadar and not (is_uploaded and pd.notna(emp_data.get('photo_base64'))):
-                        st.warning("⚠️ Admin belum mengunggah foto acuan wajah Anda.")
-                    else:
-                        img_camera = st.camera_input("Ambil Foto di Lokasi", key="cam_pegawai_input")
-                        
-                        if is_cadar:
-                            st.session_state.wajah_terverifikasi = True
-                            st.info("🧕 Verifikasi biometrik dilewati (Mode Audit).")
-
-                        if img_camera:
-                            bytes_data = kompres_foto(img_camera.getvalue())
-                            cam_base64 = f"data:image/jpeg;base64,{base64.b64encode(bytes_data).decode('utf-8')}"
-                            tgl_sekarang_str = datetime.datetime.now(pytz.timezone('Asia/Makassar')).strftime('%Y%m%d_%H%M%S')
-                            url_foto_harian = upload_ke_supabase(bytes_data, f"foto_presensi/{emp_data['nip']}_{tgl_sekarang_str}.jpg", "image/jpeg")
-                            
-                            if not is_cadar:
-                                html_code = f"""
-                                <!DOCTYPE html>
-                                <html>
-                                <head><script src="https://cdn.jsdelivr.net/npm/@vladmandic/face-api@1.7.12/dist/face-api.js"></script></head>
-                                <body style="text-align: center; font-family: sans-serif; margin:0; padding:5px;">
-                                    <div id="status" style="color:#d9534f; font-weight:bold;">Memuat AI...</div>
-                                    <div id="kode" style="display:none; color:white; background:#5cb85c; padding:8px; border-radius:5px; font-weight:bold;">✅ WAJAH COCOK</div>
-                                    <img id="refImg" crossorigin="anonymous" src="{emp_data.get('photo_base64', '')}" style="display:none;" />
-                                    <img id="camImg" src="{cam_base64}" style="display:none;" />
-                                    <script>
-                                        async function runAI() {{
-                                            const status = document.getElementById('status');
-                                            try {{
-                                                const URL = 'https://cdn.jsdelivr.net/npm/@vladmandic/face-api@1.7.12/model';
-                                                await faceapi.nets.ssdMobilenetv1.loadFromUri(URL);
-                                                await faceapi.nets.faceLandmark68Net.loadFromUri(URL);
-                                                await faceapi.nets.faceRecognitionNet.loadFromUri(URL);
-                                                const ref = await faceapi.detectSingleFace(document.getElementById('refImg')).withFaceLandmarks().withFaceDescriptor();
-                                                const cam = await faceapi.detectSingleFace(document.getElementById('camImg')).withFaceLandmarks().withFaceDescriptor();
-                                                if(!ref || !cam) {{ status.innerText = "⚠️ Wajah tidak jelas."; return; }}
-                                                const match = new faceapi.FaceMatcher(ref).findBestMatch(cam.descriptor);
-                                                if(match.distance <= 0.5) {{ 
-                                                    status.style.display = "none";
-                                                    document.getElementById('kode').style.display = "inline-block";
-                                                    try {{
-                                                        window.parent.document.querySelectorAll('p').forEach(p => {{
-                                                            if(p.innerText === "V_E_R_I_F_I_E_D") p.closest('button').click();
-                                                        }});
-                                                    }} catch(err) {{}}
-                                                }} else {{ status.innerText = "⛔ WAJAH TIDAK COCOK!"; }}
-                                            }} catch(e) {{ status.innerText = "Gagal memuat AI."; }}
-                                        }}
-                                        setTimeout(runAI, 500);
-                                    </script>
-                                </body>
-                                </html>
-                                """
-                                components.html(html_code, height=60, scrolling=False)
-
-                                if not st.session_state.wajah_terverifikasi:
-                                    st.markdown('<style>div.stButton > button:has(p:contains("V_E_R_I_F_I_E_D")) {opacity: 0; height: 1px; pointer-events: none;}</style>', unsafe_allow_html=True)
-                                    if st.button("V_E_R_I_F_I_E_D", key="btn_hidden_trigger"):
-                                        st.session_state.wajah_terverifikasi = True
-                                        st.rerun()
-                                    
-                            if st.session_state.wajah_terverifikasi:
-                                col_masuk, col_pulang = st.columns(2)
-                                btn_masuk = col_masuk.button("📥 MASUK", type="primary", use_container_width=True, key="btn_absen_masuk")
-                                btn_pulang = col_pulang.button("📤 PULANG", use_container_width=True, key="btn_absen_pulang")
-                                    
-                                if btn_masuk or btn_pulang:
-                                    now = datetime.datetime.now(pytz.timezone('Asia/Makassar'))
-                                    tgl_sekarang = now.strftime('%Y-%m-%d')
-                                    jenis_aksi = "Masuk" if btn_masuk else "Pulang"
-                                    
-                                    try:
-                                        res_absen = supabase.table('absensi').select('status').eq('nip', str(emp_data['nip'])).eq('tanggal', tgl_sekarang).execute()
-                                        df_absen_hari_ini = pd.DataFrame(res_absen.data) if res_absen.data else pd.DataFrame()
-                                    except: df_absen_hari_ini = pd.DataFrame()
-                                    
-                                    if not df_absen_hari_ini.empty and not df_absen_hari_ini[df_absen_hari_ini['status'].str.contains(jenis_aksi, na=False, case=False)].empty:
-                                        st.warning(f"⚠️ Anda sudah absen **{jenis_aksi}** hari ini!")
-                                    else:
-                                        jam_sekarang = now.time()
-                                        df_settings = get_data_pengaturan()
-                                        try:
-                                            b_masuk_str = df_settings['batas_masuk'].iloc[0] if not df_settings.empty else '07:30'
-                                            b_pulang_str = df_settings['batas_pulang'].iloc[0] if not df_settings.empty else '16:00'
-                                            batas_masuk_obj = datetime.datetime.strptime(b_masuk_str, '%H:%M').time()
-                                            batas_pulang_obj = datetime.datetime.strptime(b_pulang_str, '%H:%M').time()
-                                        except:
-                                            batas_masuk_obj, batas_pulang_obj = datetime.time(7, 30), datetime.time(16, 0)
-                                        
-                                        if btn_masuk:
-                                            jenis_absen = "Masuk (TERLAMBAT)" if jam_sekarang > batas_masuk_obj else "Masuk (Tepat Waktu)"
-                                        else:
-                                            jenis_absen = "Pulang (LEBIH AWAL)" if jam_sekarang < batas_pulang_obj else "Pulang (Tepat Waktu)"
-
-                                        status_final = f"Hadir {'[Audit] ' if is_cadar else ''}- {jenis_absen}"
-                                        
-                                        supabase.table('absensi').insert({
-                                            'nip': str(emp_data['nip']), 'nama': emp_data['name'], 
-                                            'sekolah': sch_data['school_name'], 'tanggal': tgl_sekarang, 
-                                            'jam': now.strftime('%H:%M:%S'), 'jarak_m': str(round(jarak_meter, 1)), 
-                                            'status': status_final, 'foto_bukti': url_foto_harian if url_foto_harian else "" 
-                                        }).execute()
-                                        st.success(f"✅ Absensi {jenis_absen} berhasil!")
-                            else: st.warning("Tunggu verifikasi biometrik selesai...")
-                else: st.error(f"⛔ Anda berada di luar radius ({jarak_meter:.0f} m dari {sch_data['radius_m']} m).")
-            else: st.warning("Menunggu akses GPS...")
-
-# ==========================================
-# HAK AKSES 2: ADMIN SEKOLAH
-# ==========================================
-elif st.session_state.role == "Admin":
+if st.session_state.role == "Admin":
     col_judul, col_tombol = st.columns([3, 1])
     col_judul.title("🔐 Dashboard Admin Sekolah")
     col_tombol.button("🚪 Logout", on_click=logout, use_container_width=True, key="btn_logout_top_admin")
@@ -715,20 +540,18 @@ elif st.session_state.role == "Admin":
                                 c_foto.image(foto_url, caption="Foto Bukti Absen", use_container_width=True)
 
 # ==========================================
-# HAK AKSES 3: SUPERADMIN
+# HAK AKSES 2: SUPERADMIN
 # ==========================================
 elif st.session_state.role == "Superadmin":
     col_judul, col_tombol = st.columns([3, 1])
     col_judul.title("🛠️ Dashboard Superadmin")
     col_tombol.button("🚪 Logout", on_click=logout, use_container_width=True, key="btn_logout_superadmin")
 
-    # Jika menu terkunci sudah dibuka, tampilkan pilihan mengunci kembali
     if st.session_state.get('menu_unlocked', False):
         if st.button("🔒 Kunci Kembali Layar Menu Admin", key="btn_lock_menu_again"):
             st.session_state['menu_unlocked'] = False
             st.rerun()
 
-    # Fungsi Helper Form Kunci Password Menu
     def tampilkan_form_kunci(nama_tab):
         st.warning(f"🔒 Menu **{nama_tab}** dikunci untuk mencegah kesalahan modifikasi.")
         pw_input = st.text_input("Masukkan Sandi Khusus Menu:", type="password", key=f"pw_lock_{nama_tab}")
@@ -741,15 +564,10 @@ elif st.session_state.role == "Superadmin":
             else:
                 st.error("❌ Sandi menu salah!")
 
-    # DEKLARASI TAB SUPERADMIN
     tab_sekolah, tab_pc, tab_pegawai, tab_admin, tab_izin, tab_database, tab_jam, tab_rekap, tab_indisipliner = st.tabs([
         "🏛️ Sekolah", "💻 PC", "👥 Pegawai", "🔑 Admin", "📝 Izin", "🚨 Database", "⚙️ Jam", "📈 REKAP ABSENSI", "🟥 LAPORAN INDISIPLINER PEGAWAI"
     ])
 
-    # =========================================================================
-    # 🟢 MENU BEBAS AKSES (TIDAK MEMBUTUHKAN PASSWORD)
-    # =========================================================================
-    
     # ------------------------------------------
     # 1. TAB REKAP ABSENSI (BEBAS AKSES)
     # ------------------------------------------
@@ -849,10 +667,6 @@ elif st.session_state.role == "Superadmin":
                 except Exception as e:
                     st.error(f"Terjadi kesalahan: {e}")
 
-    # =========================================================================
-    # 🔴 MENU TERKUNCI (MEMBUTUHKAN SANDI KHUSUS MENU)
-    # =========================================================================
-
     # ------------------------------------------
     # 3. TAB SEKOLAH (TERKUNCI)
     # ------------------------------------------
@@ -887,7 +701,7 @@ elif st.session_state.role == "Superadmin":
                             })
                         
                         supabase.table('sekolah').upsert(records).execute()
-                        st.cache_data.clear() # Reset Cache agar data baru terambil
+                        st.cache_data.clear()
                         st.success("✅ Data sekolah berhasil disimpan/diperbarui!")
                         time.sleep(1)
                         st.rerun()
@@ -896,7 +710,7 @@ elif st.session_state.role == "Superadmin":
                 except Exception as e:
                     st.error(f"❌ Gagal menyimpan ke database: {e}")
 
-   # ------------------------------------------
+    # ------------------------------------------
     # 4. TAB PC (TERKUNCI) - GENERATE 3 KUNCI PC
     # ------------------------------------------
     with tab_pc:
@@ -912,13 +726,11 @@ elif st.session_state.role == "Superadmin":
                 btn_cari_pc = col_b1.form_submit_button("🔍 Cari PC Sekolah", use_container_width=True)
                 btn_generate_pc = col_b2.form_submit_button("🔑 Generate 3 Kunci PC", type="primary", use_container_width=True)
                 
-            # PROSES GENERATE 3 KUNCI PC
             if btn_generate_pc:
                 nama_sekolah_clean = sekolah_input_pc.strip()
                 if not nama_sekolah_clean:
                     st.warning("⚠️ Silahkan masukkan Nama Sekolah terlebih dahulu!")
                 else:
-                    # Menghilangkan spasi/karakter khusus untuk prefix kode kunci (misal: SMKN 6 WAJO -> SMKN6WAJO)
                     prefix = "".join(e for e in nama_sekolah_clean if e.isalnum()).upper()
                     kunci_1 = f"{prefix}-PC1"
                     kunci_2 = f"{prefix}-PC2"
@@ -931,7 +743,6 @@ elif st.session_state.role == "Superadmin":
                     ]
 
                     try:
-                        # Masukkan/update 3 kunci ke database Supabase
                         supabase.table('kunci_perangkat').upsert(records, on_conflict='kunci').execute()
                         st.success(f"✅ Berhasil membuat 3 Kunci PC untuk **{nama_sekolah_clean}**!")
                         st.session_state.last_searched_school_pc = nama_sekolah_clean
@@ -940,7 +751,6 @@ elif st.session_state.role == "Superadmin":
                     except Exception as e:
                         st.error(f"❌ Gagal membuat kunci: {e}")
 
-            # PROSES PENCARIAN KUNCI
             if btn_cari_pc:
                 if sekolah_input_pc.strip():
                     st.session_state.last_searched_school_pc = sekolah_input_pc.strip()
@@ -979,7 +789,7 @@ elif st.session_state.role == "Superadmin":
                     st.error(f"Gagal mengambil data dari Supabase: {e}")
 
     # ------------------------------------------
-    # 5. TAB PEGAWAI (TERKUNCI) + BUKA KUNCI FOTO
+    # 5. TAB PEGAWAI (TERKUNCI) + BUKA KUNCI FOTO & TOMBOL LIAT FOTO
     # ------------------------------------------
     with tab_pegawai:
         if not st.session_state['menu_unlocked']:
@@ -1019,7 +829,6 @@ elif st.session_state.role == "Superadmin":
             # --- FEATURE 2: DOWNLOAD TEMPLATE & UPLOAD MASSAL ---
             st.markdown("### 📥 Download Template & Upload Massal")
             
-            # Generator File Template Excel
             df_template = pd.DataFrame([
                 {"nip": "198001012005011001", "name": "Ahmad, S.Pd.", "school_name": "SMKN 6 WAJO"},
                 {"nip": "198502022008022002", "name": "Siti, M.Pd.", "school_name": "SMKN 6 WAJO"}
@@ -1083,9 +892,9 @@ elif st.session_state.role == "Superadmin":
                     time.sleep(1)
                     st.rerun()
                     
-            # --- FEATURE 4: EDIT DATA PEGAWAI, STATUS CADAR & BUKA KUNCI FOTO ---
+            # --- FEATURE 4: EDIT DATA PEGAWAI, BUKA KUNCI FOTO & TOMBOL LIAT FOTO ---
             st.markdown("### ✏️ Edit Data Pegawai & Buka Kunci Foto")
-            st.caption("Cari berdasarkan NIP untuk meminimalkan beban database (Hemat Egress).")
+            st.caption("Cari berdasarkan NIP. Data foto hanya akan ditarik dari server jika Anda menekan tombol '🖼️ LIHAT FOTO'.")
 
             with st.form("form_cari_edit_pegawai"):
                 edit_nip_cari = st.text_input("Masukkan NIP Pegawai yang ingin diedit/dibuka kuncinya:", placeholder="Contoh: 198001012005011001", key="nip_edit_cari")
@@ -1094,15 +903,16 @@ elif st.session_state.role == "Superadmin":
             if btn_cari_edit:
                 if edit_nip_cari.strip():
                     st.session_state.edit_nip_target = edit_nip_cari.strip()
+                    st.session_state.show_photo_nip = None # Reset tampilan foto saat cari NIP baru
                 else:
                     st.session_state.edit_nip_target = None
                     st.warning("Silahkan masukkan NIP terlebih dahulu.")
 
-            # Hanya fetch data dari Supabase jika NIP sudah diinputkan
+            # HANYA TARIK DATA TEKS (TANPA photo_base64) DARI SUPABASE
             if st.session_state.get('edit_nip_target'):
                 target_nip = st.session_state.edit_nip_target
                 try:
-                    res_edit = supabase.table('pegawai').select('nip, name, school_name, photo_uploaded, photo_base64, is_cadar').eq('nip', target_nip).execute()
+                    res_edit = supabase.table('pegawai').select('nip, name, school_name, photo_uploaded, is_cadar').eq('nip', target_nip).execute()
                     df_edit = pd.DataFrame(res_edit.data) if res_edit.data else pd.DataFrame()
                 except Exception as e:
                     df_edit = pd.DataFrame()
@@ -1112,16 +922,33 @@ elif st.session_state.role == "Superadmin":
                     st.warning(f"⚠️ Pegawai dengan NIP {target_nip} tidak ditemukan.")
                 else:
                     emp_edit = df_edit.iloc[0]
+                    current_photo_uploaded = str(emp_edit.get('photo_uploaded', 'False')).lower() == 'true'
+
+                    st.info(f"📌 Mengedit data untuk NIP: **{target_nip}** | Nama: **{emp_edit.get('name', '')}**")
                     
+                    # TOMBOL LIAT FOTO (Hanya muncul jika foto sudah diunggah)
+                    if current_photo_uploaded:
+                        col_status_f, col_btn_f = st.columns([2, 1])
+                        col_status_f.success("📷 Foto acuan sudah terunggah dalam sistem.")
+                        if col_btn_f.button("🖼️ LIHAT FOTO", key=f"btn_liat_foto_{target_nip}"):
+                            st.session_state.show_photo_nip = target_nip
+                    else:
+                        st.info("📷 Pegawai ini belum memiliki foto acuan.")
+
+                    # SISTEM MENARIK FOTO HANYA JIKA TOMBOL 'LIHAT FOTO' DITEKAN
+                    if st.session_state.get('show_photo_nip') == target_nip:
+                        try:
+                            res_photo = supabase.table('pegawai').select('photo_base64').eq('nip', target_nip).execute()
+                            if res_photo.data and res_photo.data[0].get('photo_base64'):
+                                photo_url_or_base64 = res_photo.data[0]['photo_base64']
+                                st.image(photo_url_or_base64, caption=f"Foto Acuan: {emp_edit.get('name', '')}", width=250)
+                            else:
+                                st.warning("Data foto tidak ditemukan.")
+                        except Exception as e_foto:
+                            st.error(f"Gagal menarik data foto: {e_foto}")
+
+                    # FORM UPDATE DATA PEGAWAI
                     with st.form("form_update_pegawai"):
-                        st.info(f"Mengedit data untuk NIP: **{target_nip}**")
-                        
-                        current_photo_uploaded = str(emp_edit.get('photo_uploaded', 'False')).lower() == 'true'
-                        if current_photo_uploaded and pd.notna(emp_edit.get('photo_base64')) and emp_edit['photo_base64']:
-                            st.image(emp_edit['photo_base64'], caption=f"Foto {emp_edit.get('name', '')}", width=250)
-                        elif not current_photo_uploaded:
-                            st.info("📷 Pegawai ini belum memiliki foto acuan.")
-                        
                         edit_nama = st.text_input("Nama Pegawai:", value=emp_edit.get('name', ''))
                         
                         df_sch_opt_edit = get_data_sekolah()
@@ -1139,7 +966,6 @@ elif st.session_state.role == "Superadmin":
                         edit_cadar = st.checkbox("🧕 Tandai sebagai Pegawai Bercadar (Bypass Wajah / Mode Audit)", value=current_cadar)
                         
                         # --- MODUL BUKA KUNCI FOTO OLEH SUPERADMIN ---
-                        current_photo_uploaded = str(emp_edit.get('photo_uploaded', 'False')).lower() == 'true'
                         if current_photo_uploaded:
                             st.warning("🔒 Status Foto Pegawai saat ini: **TERKUNCI (Sudah Diunggah)**")
                             buka_kunci_foto = st.checkbox("🔓 Centang di sini untuk MEMBUKA KUNCI FOTO (Izinkan Admin Sekolah mengunggah ulang foto acuan)")
@@ -1165,6 +991,7 @@ elif st.session_state.role == "Superadmin":
                                 
                                 st.success("✅ Data pegawai & status kunci berhasil diperbarui!")
                                 st.session_state.edit_nip_target = None
+                                st.session_state.show_photo_nip = None
                                 time.sleep(1)
                                 st.rerun()
                             except Exception as e:
@@ -1251,7 +1078,7 @@ elif st.session_state.role == "Superadmin":
             n_out = st.time_input("Batas Pulang", datetime.datetime.strptime(b_out, '%H:%M').time())
             if st.button("Simpan Pengaturan"):
                 supabase.table('pengaturan').update({'batas_masuk': n_in.strftime('%H:%M'), 'batas_pulang': n_out.strftime('%H:%M')}).neq('batas_masuk', '').execute()
-                st.cache_data.clear() # Reset cache pengaturan
+                st.cache_data.clear()
                 st.success("✅ Pengaturan jam berhasil diperbarui!")
                 time.sleep(1)
                 st.rerun()
