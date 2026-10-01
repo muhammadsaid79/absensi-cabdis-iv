@@ -73,28 +73,6 @@ def tampilkan_peringatan_csv():
     if st.button("Oke, Saya Mengerti", key="btn_close_dialog_csv", use_container_width=True):
         st.rerun()
 
-# --- DIALOG PERINGATAN PENDAFTARAN PC BARU ---
-@st.dialog("⚠️ Peringatan Pendaftaran PC!")
-def konfirmasi_pendaftaran_pc(nama_pc, admin_sekolah):
-    st.warning("MAX HANYA 3 PC! PASTIKAN SUDAH MELAPORKAN KE ADMIN CABDIS (MOCHD GHAZALI/JEDDAH/GAZA) SEBELUM MENDAFTARKAN PC (ADMIN CABDIS BERHAK MENGHAPUS PC YANG TIDAK DIKERAHUI).")
-    st.write(f"Apakah Anda yakin ingin mendaftarkan **{nama_pc}**?")
-    
-    col_ya, col_batal = st.columns(2)
-    if col_ya.button("✅ Ya, Daftarkan", type="primary", use_container_width=True):
-        new_token = str(uuid.uuid4())
-        cookie_manager.set("school_device_token", new_token, key="set_pc_cookie_dialog")
-        supabase.table('perangkat_sekolah').insert({
-            'school_name': admin_sekolah, 
-            'device_id': new_token, 
-            'device_name': nama_pc
-        }).execute()
-        st.success("✅ PC berhasil didaftarkan!")
-        time.sleep(1)
-        st.rerun()
-        
-    if col_batal.button("❌ Batal", use_container_width=True):
-        st.rerun()
-
 # --- 1.5. FUNGSI KRIPTOGRAFI KEAMANAN ---
 SECRET_KEY = os.environ.get("COOKIE_SECRET") or st.secrets.get("COOKIE_SECRET")
 SUPERADMIN_PASSWORD = os.environ.get("SUPERADMIN_PASSWORD") or st.secrets.get("SUPERADMIN_PASSWORD")
@@ -338,63 +316,13 @@ if st.session_state.role == "Admin":
     col_tombol.button("🚪 Logout", on_click=logout, use_container_width=True, key="btn_logout_top_admin")
     admin_akses = st.session_state.get('admin_sekolah', 'Semua Sekolah')
 
-    tab_pc, tab_foto, tab_dashboard = st.tabs([
-        "💻 1. Pendaftaran PC Sekolah", 
-        "📸 2. Upload Foto Pegawai", 
-        "📊 3. Dashboard Cek Absensi"
+    tab_foto, tab_dashboard = st.tabs([
+        "📸 1. Upload Foto Pegawai", 
+        "📊 2. Dashboard Cek Absensi"
     ])
 
     # ------------------------------------------
-    # MENU 1: PENDAFTARAN PC SEKOLAH (MAX 3 PC)
-    # ------------------------------------------
-    with tab_pc:
-        st.markdown("### 💻 Pendaftaran PC Sekolah (Maksimal 3 PC)")
-        
-        try:
-            res_pc = supabase.table('perangkat_sekolah').select('id, device_name').eq('school_name', admin_akses).execute()
-            list_pc = res_pc.data if res_pc.data else []
-        except: list_pc = []
-
-        total_terdaftar = len(list_pc)
-        st.info(f"Status Kuota Perangkat: **{total_terdaftar} dari 3 PC Terdaftar**")
-
-        if total_terdaftar >= 3:
-            st.error("🔒 **PENDAFTARAN TERKUNCI!** Sekolah Anda sudah mendaftarkan batas maksimal (3 PC).")
-        else:
-            with st.form("form_daftar_pc"):
-                nama_pc_input = st.text_input("Masukkan Label / Nama PC Baru:", placeholder="Contoh: PC LAB 01", key="inp_nama_pc_baru_menu")
-                submit_pc = st.form_submit_button("📌 Daftarkan PC Ini")
-                
-                if submit_pc:
-                    if admin_akses == "Semua Sekolah":
-                        st.error("Login spesifik sebagai admin sekolah diperlukan!")
-                    elif not nama_pc_input.strip():
-                        st.error("Nama/Label PC wajib diisi!")
-                    else:
-                        if total_terdaftar >= 1:
-                            konfirmasi_pendaftaran_pc(nama_pc_input.strip(), admin_akses)
-                        else:
-                            new_token = str(uuid.uuid4())
-                            cookie_manager.set("school_device_token", new_token, key="set_pc_cookie_1st")
-                            supabase.table('perangkat_sekolah').insert({
-                                'school_name': admin_akses, 
-                                'device_id': new_token, 
-                                'device_name': nama_pc_input.strip()
-                            }).execute()
-                            st.success("✅ PC ke-1 berhasil didaftarkan!")
-                            time.sleep(1)
-                            st.rerun()
-
-        st.markdown("---")
-        st.markdown("##### 📋 Daftar PC Resmi Terdaftar")
-        if list_pc:
-            for idx_p, r_pc in enumerate(list_pc, 1):
-                st.write(f"{idx_p}. 🖥 **{r_pc['device_name']}** — 🔒 Terkunci Permanen")
-        else:
-            st.info("Belum ada PC terdaftar untuk sekolah ini.")
-
-    # ------------------------------------------
-    # MENU 2: UPLOAD FOTO PEGAWAI (TERKUNCI SETELAH UPLOAD)
+    # MENU 1: UPLOAD FOTO PEGAWAI (TERKUNCI SETELAH UPLOAD)
     # ------------------------------------------
     with tab_foto:
         st.markdown("### 📸 Upload Foto Pegawai")
@@ -476,7 +404,7 @@ if st.session_state.role == "Admin":
                                 st.rerun()
 
     # ------------------------------------------
-    # MENU 3: DASHBOARD CEK ABSENSI PEGAWAI
+    # MENU 2: DASHBOARD CEK ABSENSI PEGAWAI
     # ------------------------------------------
     with tab_dashboard:
         st.markdown("### 📊 Dashboard Cek Absensi Pegawai")
@@ -1050,7 +978,7 @@ elif st.session_state.role == "Superadmin":
             tampilkan_form_kunci("Database")
         else:
             st.markdown("### 🚨 Database Clean Up")
-            if st.button("🖼️ Hapus Semua Foto (Teks Aman)", type="primary"):
+            if st.button("🖼️️ Hapus Semua Foto (Teks Aman)", type="primary"):
                 supabase.table('absensi').update({'foto_bukti': ''}).neq('foto_bukti', '').execute()
                 st.success("Foto fisik berhasil diputus dari database (Hemat Egress).")
                 
