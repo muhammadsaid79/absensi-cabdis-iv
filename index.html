@@ -5,6 +5,10 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Portal Presensi Pegawai</title>
     
+    <!-- LINK MANIFEST PWA & THEME COLOR -->
+    <link rel="manifest" href="manifest.json">
+    <meta name="theme-color" content="#1e3a8a">
+    
     <!-- FAVICON -->
     <link rel="icon" type="image/png" href="favicon.png">
     
@@ -32,7 +36,7 @@
         <!-- BAGIAN HEADER BARU (LOGO PEMPROV & JUDUL)  -->
         <!-- ========================================== -->
         <div class="flex flex-col items-center justify-center text-center mb-5 mt-2">
-            <!-- Logo Pemprov Sulsel (Diambil dari link langsung, tidak perlu upload gambar) -->
+            <!-- Logo Pemprov Sulsel -->
             <img 
                 src="logo-sulsel.png" 
                 alt="Logo Pemprov Sulsel" 
@@ -50,6 +54,11 @@
             </p>
         </div>
         <!-- ========================================== -->
+
+        <!-- TOMBOL INSTALL APLIKASI DESKTOP (AKAN MUNCUL OTOMATIS SAAT BROWSER MENDUKUNG) -->
+        <button id="btn-install-pwa" class="hidden w-full bg-indigo-600 hover:bg-indigo-700 text-white font-bold py-2.5 px-4 rounded-lg text-xs mb-4 flex items-center justify-center gap-2 shadow-md transition">
+            🖥️ Install Aplikasi ke PC / Laptop
+        </button>
 
         <!-- STATUS VERIFIKASI PERANGKAT / PC -->
         <div id="device-status-box" class="mb-4 p-2.5 bg-amber-50 border border-amber-200 rounded-lg text-center text-xs font-semibold text-amber-800 flex items-center justify-between">
@@ -140,6 +149,40 @@
     </div>
 
     <script>
+        // ==========================================
+        // FITUR REGISTRASI PWA & TOMBOL INSTALL
+        // ==========================================
+        if ('serviceWorker' in navigator) {
+            navigator.serviceWorker.register('./sw.js')
+                .then(() => console.log('Service Worker PWA Aktif'))
+                .catch(err => console.error('Gagal memuat SW:', err));
+        }
+
+        let deferredPrompt;
+        const btnInstallPWA = document.getElementById('btn-install-pwa');
+
+        window.addEventListener('beforeinstallprompt', (e) => {
+            e.preventDefault();
+            deferredPrompt = e;
+            if (btnInstallPWA) {
+                btnInstallPWA.classList.remove('hidden');
+            }
+        });
+
+        if (btnInstallPWA) {
+            btnInstallPWA.addEventListener('click', async () => {
+                if (deferredPrompt) {
+                    deferredPrompt.prompt();
+                    const { outcome } = await deferredPrompt.userChoice;
+                    if (outcome === 'accepted') {
+                        btnInstallPWA.classList.add('hidden');
+                    }
+                    deferredPrompt = null;
+                }
+            });
+        }
+        // ==========================================
+
         const SUPABASE_URL = 'https://rulvwumuhlzzehwkibup.supabase.co';
         const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InJ1bHZ3dW11aGx6emVod2tpYnVwIiwicm9sZSI6ImFub24iLCJpYXQiOjE3OTA2ODYzNzMsImV4cCI6MjEwNjI2MjM3M30.-zFMHuGQRiPsBEsgOINZI4r6tEeUTFgnMcX4CN85t8Y';
 
@@ -277,7 +320,7 @@
             await muatModelAI();
         });
 
-        // 3. PENCARIAN PEGAWAI + OPTIMASI MEMORI LOKAL (HEMAT EGRESS)
+        // 3. PENCARIAN PEGAWAI + OPTIMASI MEMORI LOKAL
         async function cekPegawai() {
             if (!sekolahPerangkatTerdaftar) {
                 alert("🔒 Akses Ditolak! PC ini belum terdaftar sebagai PC Resmi Sekolah.");
@@ -294,18 +337,16 @@
             btn.innerText = "Mencari data...";
             btn.disabled = true;
 
-            // CEK DARI MEMORI LOKAL TERLEBIH DAHULU (0 BYTE EGRESS)
+            // CEK DARI MEMORI LOKAL TERLEBIH DAHULU
             const cacheNama = localStorage.getItem(`nama_${nip}`);
             const cacheSekolah = localStorage.getItem(`sekolah_${nip}`);
             const cacheFoto = localStorage.getItem(`foto_acuan_${nip}`);
 
             if (cacheNama && cacheSekolah && cacheFoto !== null) {
-                // DATA DIAMBIL DARI MEMORI PERANGKAT
                 namaPegawai = cacheNama;
                 sekolahPegawai = cacheSekolah;
                 fotoAcuanPegawai = (cacheFoto === "KOSONG") ? "" : cacheFoto;
             } else {
-                // JIKA BELUM ADA DI MEMORI, AMBIL DARI SUPABASE 1X SAJA
                 const { data, error } = await db
                     .from('pegawai')
                     .select('nip, name, school_name, photo_base64')
@@ -323,21 +364,18 @@
                 sekolahPegawai = data.school_name;
                 fotoAcuanPegawai = data.photo_base64 || "";
 
-                // SIMPAN KE MEMORI LOKAL
                 localStorage.setItem(`nama_${nip}`, namaPegawai);
                 localStorage.setItem(`sekolah_${nip}`, sekolahPegawai);
                 localStorage.setItem(`foto_acuan_${nip}`, fotoAcuanPegawai.trim() !== "" ? fotoAcuanPegawai : "KOSONG");
             }
 
-            // BLOKIR KAMERA JIKA FOTO BELUM DIUPLOAD
             if (!fotoAcuanPegawai || fotoAcuanPegawai.trim() === "" || fotoAcuanPegawai === "KOSONG" || fotoAcuanPegawai === "NULL") {
                 alert("FOTO BELUM DIUPLOAD ADMIN SEKOLAH JIKA SUDAH DIUPLOAD KAMERA TETAP TERTUTUP HUB ADMIN CABANG (MOCHD GAZALI/JEDDAH/GAZA)");
                 btn.innerText = "Cari Data Pegawai";
                 btn.disabled = false;
-                return; // PROSES BERHENTI, KAMERA TIDAK TERBUKA!
+                return;
             }
 
-            // CEK UNIT KERJA SEKOLAH
             if (sekolahPegawai.trim().toLowerCase() !== sekolahPerangkatTerdaftar.trim().toLowerCase()) {
                 alert(`🚫 Akses Ditolak!\n\nAnda terdaftar di unit kerja "${sekolahPegawai}", sedangkan PC ini dikunci untuk "${sekolahPerangkatTerdaftar}". Silakan presensi di PC Sekolah Anda!`);
                 btn.innerText = "Cari Data Pegawai";
@@ -360,7 +398,6 @@
             dapatkanGPS();
         }
 
-        // HAPUS MEMORI LOKAL NIP INI (MEMAKSA SUPABASE MENGAMBIL FOTO BARU)
         async function segarkanData() {
             const nip = document.getElementById('nip-input').value.trim();
             if (!nip) return;
@@ -405,7 +442,6 @@
             }
         }
 
-        // TANGKAP FOTO & COCOKKAN DENGAN FOTO LOKAL PEGAWAI
         async function ambilFoto() {
             const video = document.getElementById('webcam');
             const canvas = document.getElementById('canvas');
@@ -476,7 +512,6 @@
                 aiStatus.className = "p-2 bg-emerald-100 text-emerald-800 rounded text-center text-xs font-semibold";
                 aiStatus.innerHTML = "✅ AI: Wajah Terverifikasi! Pilih jenis presensi di bawah ini:";
                 
-                // TAMPILKAN TOMBOL DATANG & PULANG
                 document.getElementById('btn-kirim-container').classList.remove('hidden');
 
             } catch (err) {
@@ -517,7 +552,6 @@
             ulangFoto();
         }
 
-        // KIRIM DATANG / PULANG DENGAN JAM GLOBAL (MAKASSAR/WITA)
         async function kirimPresensi(jenisStatus) {
             const nip = document.getElementById('nip-input').value.trim();
             const btnDatang = document.getElementById('btn-datang');
@@ -530,20 +564,18 @@
             let jamSekarang = "";
 
             try {
-                // Mengambil waktu global secara real-time khusus zona waktu Makassar (WITA)
                 const response = await fetch('https://worldtimeapi.org/api/timezone/Asia/Makassar');
                 if (!response.ok) throw new Error("Gagal merespons server waktu.");
                 const data = await response.json();
                 
-                // Memecah hasil datetime dari API (Contoh: "2023-10-27T08:30:00.123+08:00")
                 tglSekarang = data.datetime.split('T')[0];
-                jamSekarang = data.datetime.split('T')[1].substring(0, 8); // Mengambil HH:MM:SS saja
+                jamSekarang = data.datetime.split('T')[1].substring(0, 8);
                 
             } catch (error) {
                 alert("❌ Gagal mendapatkan waktu global jaringan. Pastikan koneksi internet Anda stabil dan coba lagi.");
                 btnDatang.disabled = false;
                 btnPulang.disabled = false;
-                return; // Membatalkan pengiriman data jika gagal mendapatkan jam global yang valid
+                return;
             }
 
             const { error } = await db.from('absensi').insert([{
