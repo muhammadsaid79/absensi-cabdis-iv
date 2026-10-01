@@ -276,7 +276,7 @@ def logout():
 # HALAMAN LOGIN UTAMA (KHUSUS ADMIN & SUPERADMIN)
 # ==========================================
 if st.session_state.role is None:
-    st.title("📍 Portal Pengelola Presensi CABDIS WIL IV")
+    st.title("📜 AKSES ADMIN ABSENSI SATUAN PENDIDIKAN CABDIS WIL IV")
     st.info("Selamat datang! Silakan masuk ke akun pengelola sistem di bawah ini.")
 
     st.caption("Akses Pengelola Sistem:")
