@@ -272,7 +272,7 @@
             } else {
                 const { data, error } = await db
                     .from('pegawai')
-                    .select('nip, nama, school_name, photo_base64')
+                    .select('nip, name, school_name, photo_base64')
                     .eq('nip', nip)
                     .single();
 
@@ -283,7 +283,7 @@
                     return;
                 }
 
-                namaPegawai = data.nama;
+                namaPegawai = data.name;
                 sekolahPegawai = data.school_name;
                 fotoAcuanPegawai = data.photo_base64 || "";
 
