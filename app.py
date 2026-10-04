@@ -10,6 +10,8 @@ import hashlib
 import calendar
 import datetime
 import pytz
+import numpy as np # Library Numpy (Tambahan Baru)
+import face_recognition # Library Deteksi Wajah (Tambahan Baru)
 
 import pandas as pd
 import streamlit as st
@@ -77,6 +79,8 @@ def tampilkan_peringatan_csv():
 SECRET_KEY = os.environ.get("COOKIE_SECRET") or st.secrets.get("COOKIE_SECRET")
 SUPERADMIN_PASSWORD = os.environ.get("SUPERADMIN_PASSWORD") or st.secrets.get("SUPERADMIN_PASSWORD")
 SUPERADMIN_MENU_PASSWORD = os.environ.get("SUPERADMIN_MENU_PASSWORD") or st.secrets.get("SUPERADMIN_MENU_PASSWORD", "SandiMenu2026!")
+# Sandi Khusus Admin Dashboard (Sesuai Permintaan)
+ADMIN_DASHBOARD_PASSWORD = os.environ.get("ADMIN_DASHBOARD_PASSWORD") or st.secrets.get("ADMIN_DASHBOARD_PASSWORD", "SandiMenu2026*")
 
 if not SECRET_KEY or not SUPERADMIN_PASSWORD:
     st.error("🔒 KUNCI RAHASIA TIDAK DITEMUKAN! Pastikan COOKIE_SECRET dan SUPERADMIN_PASSWORD terisi.")
@@ -206,6 +210,7 @@ for key_state, val in {
     'last_checked_nip_dash': None,
     'last_searched_school_pc': None,
     'menu_unlocked': False,
+    'admin_dashboard_unlocked': False, # State khusus admin dashboard
     'edit_nip_target': None,
     'show_photo_nip': None
 }.items():
@@ -237,6 +242,7 @@ def logout():
     st.session_state.logout_triggered = True 
     st.session_state.wajah_terverifikasi = False 
     st.session_state.menu_unlocked = False
+    st.session_state.admin_dashboard_unlocked = False # Reset state
     st.session_state.edit_nip_target = None
     st.session_state.show_photo_nip = None
     
@@ -322,7 +328,7 @@ if st.session_state.role == "Admin":
     ])
 
     # ------------------------------------------
-    # MENU 1: UPLOAD FOTO PEGAWAI (TERKUNCI SETELAH UPLOAD)
+    # MENU 1: UPLOAD FOTO PEGAWAI (TERKUNCI SETELAH UPLOAD & TERINTEGRASI PENCEGAHAN DUPLIKAT AI)
     # ------------------------------------------
     with tab_foto:
         st.markdown("### 📸 Upload Foto Pegawai")
@@ -368,7 +374,7 @@ if st.session_state.role == "Admin":
                 </script>
                 """
                 components.html(html_swal_nip, height=0)
-                st.error("⚠️ DATA ASN TIDAK DITEMUKAN SILAHKAN MELAPORKAN KE ADMIN CABDIS (MOCHD GHAZALI/JEDDAH/GAZA)")
+                st.error("⚠️️ DATA ASN TIDAK DITEMUKAN SILAHKAN MELAPORKAN KE ADMIN CABDIS (MOCHD GHAZALI/JEDDAH/GAZA)")
             else:
                 emp = df_peg_found.iloc[0]
                 nip_peg, nama_peg = str(emp['nip']), emp['name']
@@ -394,78 +400,133 @@ if st.session_state.role == "Admin":
                         st.warning("🔒 **FOTO TERKUNCI!** Foto acuan pegawai ini telah diunggah dan terkunci. Jika ingin mengubah foto, silakan hubungi Superadmin untuk membukakan kuncinya.")
                     else:
                         foto_file = st.file_uploader("Pilih Foto Acuan Pegawai (JPG/PNG):", type=['jpg', 'jpeg', 'png'], key=f"up_foto_file_{nip_peg}")
+                        
                         if foto_file and st.button("💾 Simpan Foto Acuan", key=f"btn_save_foto_{nip_peg}", use_container_width=True):
-                            file_bytes = kompres_foto(foto_file.getvalue(), quality=60, max_size=(600, 600))
-                            url_foto = upload_ke_supabase(file_bytes, f"foto_acuan/{nip_peg}.jpg", "image/jpeg")
-                            if url_foto:
-                                supabase.table('pegawai').update({'photo_uploaded': True, 'photo_base64': url_foto}).eq('nip', nip_peg).execute()
-                                st.success("✅ Foto acuan berhasil disimpan & otomatis terkunci!")
-                                time.sleep(1)
-                                st.rerun()
+                            with st.spinner("🔄 Memproses dan memvalidasi wajah. Harap tunggu..."):
+                                # 1. Validasi Wajah Duplikat
+                                try:
+                                    # Load gambar ke face_recognition
+                                    img_array = face_recognition.load_image_file(foto_file)
+                                    wajah_ditemukan = face_recognition.face_encodings(img_array)
+                                    
+                                    if len(wajah_ditemukan) == 0:
+                                        st.error("❌ Wajah tidak terdeteksi pada foto! Harap unggah foto yang menampilkan wajah dengan jelas.")
+                                        st.stop()
+                                        
+                                    wajah_baru = wajah_ditemukan[0].tolist() # Ubah ke list
+                                    
+                                    # Cek ke Supabase (RPC function)
+                                    res_dup = supabase.rpc('check_duplicate_face', {
+                                        'query_embedding': wajah_baru,
+                                        'distance_threshold': 0.15, # Threshold >85%
+                                        'exclude_nip': nip_peg
+                                    }).execute()
+                                    
+                                    if res_dup.data and len(res_dup.data) > 0:
+                                        duplikat = res_dup.data[0]
+                                        kemiripan = duplikat['similarity'] * 100
+                                        st.error(f"❌ DITOLAK! Wajah ini sudah digunakan oleh ASN lain.")
+                                        st.warning(f"Terdeteksi kemiripan {kemiripan:.1f}% dengan ASN: {duplikat['nama']} (NIP: {duplikat['nip']})")
+                                        st.stop() # Hentikan eksekusi, jangan izinkan upload!
+                                        
+                                except Exception as e_ai:
+                                    st.error(f"⚠️ Terjadi masalah pada validasi wajah: {e_ai}. Harap lapor Superadmin.")
+                                    st.stop()
+                            
+                                # 2. Lanjutkan Proses Upload ke Storage dan Update Tabel jika Lulus AI
+                                st.success("✅ Wajah valid, bukan duplikat. Melanjutkan penyimpanan...")
+                                file_bytes = kompres_foto(foto_file.getvalue(), quality=60, max_size=(600, 600))
+                                url_foto = upload_ke_supabase(file_bytes, f"foto_acuan/{nip_peg}.jpg", "image/jpeg")
+                                
+                                if url_foto:
+                                    supabase.table('pegawai').update({
+                                        'photo_uploaded': True, 
+                                        'photo_base64': url_foto,
+                                        'face_embedding': wajah_baru # Simpan embedding wajah ke DB
+                                    }).eq('nip', nip_peg).execute()
+                                    st.success("🎉 Foto acuan berhasil disimpan & otomatis terkunci!")
+                                    time.sleep(1.5)
+                                    st.rerun()
 
     # ------------------------------------------
-    # MENU 2: DASHBOARD CEK ABSENSI PEGAWAI
+    # MENU 2: DASHBOARD CEK ABSENSI PEGAWAI (DENGAN KUNCI SANDI)
     # ------------------------------------------
     with tab_dashboard:
-        st.markdown("### 📊 Dashboard Cek Absensi Pegawai")
-        st.caption("Masukkan NIP pegawai dan pilih tanggal untuk mengecek status absensi.")
-        
-        col_d1, col_d2 = st.columns([2, 1])
-        with col_d1:
-            nip_check_input = st.text_input("Masukkan NIP Pegawai:", placeholder="Contoh: 198001012005011001", key="nip_check_dashboard")
-        with col_d2:
-            tgl_check_input = st.date_input("Pilih Tanggal:", datetime.date.today(), key="tgl_check_dashboard")
-            
-        btn_cek_dash = st.button("🔍 Cek Status Absensi", type="primary", use_container_width=True, key="btn_cek_absensi_dash")
-        
-        if btn_cek_dash:
-            if nip_check_input.strip():
-                st.session_state.last_checked_nip_dash = nip_check_input.strip()
-            else:
-                st.session_state.last_checked_nip_dash = None
-                st.warning("Silahkan masukkan NIP terlebih dahulu.")
+        if not st.session_state['admin_dashboard_unlocked']:
+            st.warning("🔒 Menu **Dashboard Cek Absensi** ini dikunci.")
+            pw_dash_input = st.text_input("Masukkan Sandi Khusus Dashboard:", type="password", key="pw_lock_admin_dash")
+            if st.button("🔓 Buka Akses Dashboard", key="btn_lock_admin_dash", type="primary"):
+                if pw_dash_input == ADMIN_DASHBOARD_PASSWORD:
+                    st.session_state['admin_dashboard_unlocked'] = True
+                    st.success("✅ Akses dashboard berhasil dibuka!")
+                    time.sleep(0.5)
+                    st.rerun()
+                else:
+                    st.error("❌ Sandi salah!")
+        else:
+            if st.button("🔒 Kunci Kembali Dashboard", key="btn_relock_admin_dash"):
+                st.session_state['admin_dashboard_unlocked'] = False
+                st.rerun()
 
-        if st.session_state.last_checked_nip_dash:
-            cnip = st.session_state.last_checked_nip_dash
-            tgl_pilihan_str = tgl_check_input.strftime('%Y-%m-%d')
+            st.markdown("### 📊 Dashboard Cek Absensi Pegawai")
+            st.caption("Masukkan NIP pegawai dan pilih tanggal untuk mengecek status absensi.")
             
-            try:
-                q_p = supabase.table('pegawai').select('nip, name, school_name').eq('nip', str(cnip))
-                if admin_akses != "Semua Sekolah":
-                    q_p = q_p.eq('school_name', admin_akses)
-                res_p = q_p.execute()
-                df_p_check = pd.DataFrame(res_p.data) if res_p.data else pd.DataFrame()
-            except: df_p_check = pd.DataFrame()
+            col_d1, col_d2 = st.columns([2, 1])
+            with col_d1:
+                nip_check_input = st.text_input("Masukkan NIP Pegawai:", placeholder="Contoh: 198001012005011001", key="nip_check_dashboard")
+            with col_d2:
+                tgl_check_input = st.date_input("Pilih Tanggal:", datetime.date.today(), key="tgl_check_dashboard")
+                
+            btn_cek_dash = st.button("🔍 Cek Status Absensi", type="primary", use_container_width=True, key="btn_cek_absensi_dash")
+            
+            if btn_cek_dash:
+                if nip_check_input.strip():
+                    st.session_state.last_checked_nip_dash = nip_check_input.strip()
+                else:
+                    st.session_state.last_checked_nip_dash = None
+                    st.warning("Silahkan masukkan NIP terlebih dahulu.")
 
-            if df_p_check.empty:
-                st.warning("⚠️ Data pegawai dengan NIP tersebut tidak ditemukan di sekolah ini.")
-            else:
-                emp_d = df_p_check.iloc[0]
+            if st.session_state.last_checked_nip_dash:
+                cnip = st.session_state.last_checked_nip_dash
+                tgl_pilihan_str = tgl_check_input.strftime('%Y-%m-%d')
                 
                 try:
-                    res_a = supabase.table('absensi').select('status, jam, jarak_m, foto_bukti').eq('nip', str(cnip)).eq('tanggal', tgl_pilihan_str).execute()
-                    df_a_check = pd.DataFrame(res_a.data) if res_a.data else pd.DataFrame()
-                except: df_a_check = pd.DataFrame()
-                
-                st.markdown("---")
-                st.markdown(f"#### 👤 **{emp_d['name']}** (NIP: {cnip})")
-                st.markdown(f"🏫 **Sekolah:** {emp_d['school_name']} | 📅 **Tanggal:** {tgl_check_input.strftime('%d-%m-%Y')}")
-                
-                if df_a_check.empty:
-                    st.error("❌ **STATUS: BELUM LAKUKAN ABSENSI / TIDAK ADA CATATAN PRESENSI**")
+                    q_p = supabase.table('pegawai').select('nip, name, school_name').eq('nip', str(cnip))
+                    if admin_akses != "Semua Sekolah":
+                        q_p = q_p.eq('school_name', admin_akses)
+                    res_p = q_p.execute()
+                    df_p_check = pd.DataFrame(res_p.data) if res_p.data else pd.DataFrame()
+                except: df_p_check = pd.DataFrame()
+
+                if df_p_check.empty:
+                    st.warning("⚠️ Data pegawai dengan NIP tersebut tidak ditemukan di sekolah ini.")
                 else:
-                    st.success("✅ **STATUS: SUDAH MELAKUKAN ABSENSI**")
+                    emp_d = df_p_check.iloc[0]
                     
-                    for idx_a, r_a in df_a_check.iterrows():
-                        with st.expander(f"📌 Presensi: {r_a.get('status', '-')} — Jam: {r_a.get('jam', '-')}", expanded=True):
-                            c_info, c_foto = st.columns([2, 1])
-                            c_info.write(f"**Status Log:** {r_a.get('status', '-')}")
-                            c_info.write(f"**Waktu Presensi:** {r_a.get('jam', '-')} WITA")
-                            c_info.write(f"**Jarak dari Sekolah:** {r_a.get('jarak_m', '-')} meter")
-                            
-                            foto_url = r_a.get('foto_bukti', '')
-                            if foto_url:
-                                c_foto.image(foto_url, caption="Foto Bukti Absen", use_container_width=True)
+                    try:
+                        res_a = supabase.table('absensi').select('status, jam, jarak_m, foto_bukti').eq('nip', str(cnip)).eq('tanggal', tgl_pilihan_str).execute()
+                        df_a_check = pd.DataFrame(res_a.data) if res_a.data else pd.DataFrame()
+                    except: df_a_check = pd.DataFrame()
+                    
+                    st.markdown("---")
+                    st.markdown(f"#### 👤 **{emp_d['name']}** (NIP: {cnip})")
+                    st.markdown(f"🏫 **Sekolah:** {emp_d['school_name']} | 📅 **Tanggal:** {tgl_check_input.strftime('%d-%m-%Y')}")
+                    
+                    if df_a_check.empty:
+                        st.error("❌ **STATUS: BELUM LAKUKAN ABSENSI / TIDAK ADA CATATAN PRESENSI**")
+                    else:
+                        st.success("✅ **STATUS: SUDAH MELAKUKAN ABSENSI**")
+                        
+                        for idx_a, r_a in df_a_check.iterrows():
+                            with st.expander(f"📌 Presensi: {r_a.get('status', '-')} — Jam: {r_a.get('jam', '-')}", expanded=True):
+                                c_info, c_foto = st.columns([2, 1])
+                                c_info.write(f"**Status Log:** {r_a.get('status', '-')}")
+                                c_info.write(f"**Waktu Presensi:** {r_a.get('jam', '-')} WITA")
+                                c_info.write(f"**Jarak dari Sekolah:** {r_a.get('jarak_m', '-')} meter")
+                                
+                                foto_url = r_a.get('foto_bukti', '')
+                                if foto_url:
+                                    c_foto.image(foto_url, caption="Foto Bukti Absen", use_container_width=True)
 
 # ==========================================
 # HAK AKSES 2: SUPERADMIN
@@ -978,7 +1039,7 @@ elif st.session_state.role == "Superadmin":
             tampilkan_form_kunci("Database")
         else:
             st.markdown("### 🚨 Database Clean Up")
-            if st.button("🖼️️ Hapus Semua Foto (Teks Aman)", type="primary"):
+            if st.button("🖼 Hapus Semua Foto (Teks Aman)", type="primary"):
                 supabase.table('absensi').update({'foto_bukti': ''}).neq('foto_bukti', '').execute()
                 st.success("Foto fisik berhasil diputus dari database (Hemat Egress).")
                 
