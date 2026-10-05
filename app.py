@@ -131,6 +131,7 @@ def get_data_sekolah():
     except: pass
     return pd.DataFrame(columns=['school_name', 'lat', 'lng', 'radius_m'])
 
+@st.cache_data(ttl=600)
 def get_data_admin():
     try:
         res = supabase.table('admins').select('id, username, password, sekolah').execute()
