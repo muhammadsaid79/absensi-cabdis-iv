@@ -431,7 +431,7 @@ if st.session_state.role == "Admin":
                                 time.sleep(1)
                                 st.rerun()
 
-    # ------------------------------------------
+   # ------------------------------------------
     # MENU 2: DASHBOARD CEK ABSENSI PEGAWAI
     # ------------------------------------------
     with tab_dashboard:
@@ -461,55 +461,55 @@ if st.session_state.role == "Admin":
                 tgl_check_input = st.date_input("Pilih Tanggal:", datetime.date.today(), key="tgl_check_dashboard")
                 
             btn_cek_dash = st.button("🔍 Cek Status Absensi", type="primary", use_container_width=True, key="btn_cek_absensi_dash")
-        
-        if btn_cek_dash:
-            if nip_check_input.strip():
-                st.session_state.last_checked_nip_dash = nip_check_input.strip()
-            else:
-                st.session_state.last_checked_nip_dash = None
-                st.warning("Silahkan masukkan NIP terlebih dahulu.")
-
-        if st.session_state.last_checked_nip_dash:
-            cnip = st.session_state.last_checked_nip_dash
-            tgl_pilihan_str = tgl_check_input.strftime('%Y-%m-%d')
             
-            try:
-                q_p = supabase.table('pegawai').select('nip, name, school_name').eq('nip', str(cnip))
-                if admin_akses != "Semua Sekolah":
-                    q_p = q_p.eq('school_name', admin_akses)
-                res_p = q_p.execute()
-                df_p_check = pd.DataFrame(res_p.data) if res_p.data else pd.DataFrame()
-            except: df_p_check = pd.DataFrame()
+            if btn_cek_dash:
+                if nip_check_input.strip():
+                    st.session_state.last_checked_nip_dash = nip_check_input.strip()
+                else:
+                    st.session_state.last_checked_nip_dash = None
+                    st.warning("Silahkan masukkan NIP terlebih dahulu.")
 
-            if df_p_check.empty:
-                st.warning("⚠️ Data pegawai dengan NIP tersebut tidak ditemukan di sekolah ini.")
-            else:
-                emp_d = df_p_check.iloc[0]
+            if st.session_state.last_checked_nip_dash:
+                cnip = st.session_state.last_checked_nip_dash
+                tgl_pilihan_str = tgl_check_input.strftime('%Y-%m-%d')
                 
                 try:
-                    res_a = supabase.table('absensi').select('status, jam, jarak_m, foto_bukti').eq('nip', str(cnip)).eq('tanggal', tgl_pilihan_str).execute()
-                    df_a_check = pd.DataFrame(res_a.data) if res_a.data else pd.DataFrame()
-                except: df_a_check = pd.DataFrame()
-                
-                st.markdown("---")
-                st.markdown(f"#### 👤 **{emp_d['name']}** (NIP: {cnip})")
-                st.markdown(f"🏫 **Sekolah:** {emp_d['school_name']} | 📅 **Tanggal:** {tgl_check_input.strftime('%d-%m-%Y')}")
-                
-                if df_a_check.empty:
-                    st.error("❌ **STATUS: BELUM LAKUKAN ABSENSI / TIDAK ADA CATATAN PRESENSI**")
+                    q_p = supabase.table('pegawai').select('nip, name, school_name').eq('nip', str(cnip))
+                    if admin_akses != "Semua Sekolah":
+                        q_p = q_p.eq('school_name', admin_akses)
+                    res_p = q_p.execute()
+                    df_p_check = pd.DataFrame(res_p.data) if res_p.data else pd.DataFrame()
+                except: df_p_check = pd.DataFrame()
+
+                if df_p_check.empty:
+                    st.warning("⚠️ Data pegawai dengan NIP tersebut tidak ditemukan di sekolah ini.")
                 else:
-                    st.success("✅ **STATUS: SUDAH MELAKUKAN ABSENSI**")
+                    emp_d = df_p_check.iloc[0]
                     
-                    for idx_a, r_a in df_a_check.iterrows():
-                        with st.expander(f"📌 Presensi: {r_a.get('status', '-')} — Jam: {r_a.get('jam', '-')}", expanded=True):
-                            c_info, c_foto = st.columns([2, 1])
-                            c_info.write(f"**Status Log:** {r_a.get('status', '-')}")
-                            c_info.write(f"**Waktu Presensi:** {r_a.get('jam', '-')} WITA")
-                            c_info.write(f"**Jarak dari Sekolah:** {r_a.get('jarak_m', '-')} meter")
-                            
-                            foto_url = r_a.get('foto_bukti', '')
-                            if foto_url:
-                                c_foto.image(foto_url, caption="Foto Bukti Absen", use_container_width=True)
+                    try:
+                        res_a = supabase.table('absensi').select('status, jam, jarak_m, foto_bukti').eq('nip', str(cnip)).eq('tanggal', tgl_pilihan_str).execute()
+                        df_a_check = pd.DataFrame(res_a.data) if res_a.data else pd.DataFrame()
+                    except: df_a_check = pd.DataFrame()
+                    
+                    st.markdown("---")
+                    st.markdown(f"#### 👤 **{emp_d['name']}** (NIP: {cnip})")
+                    st.markdown(f"🏫 **Sekolah:** {emp_d['school_name']} | 📅 **Tanggal:** {tgl_check_input.strftime('%d-%m-%Y')}")
+                    
+                    if df_a_check.empty:
+                        st.error("❌ **STATUS: BELUM LAKUKAN ABSENSI / TIDAK ADA CATATAN PRESENSI**")
+                    else:
+                        st.success("✅ **STATUS: SUDAH MELAKUKAN ABSENSI**")
+                        
+                        for idx_a, r_a in df_a_check.iterrows():
+                            with st.expander(f"📌 Presensi: {r_a.get('status', '-')} — Jam: {r_a.get('jam', '-')}", expanded=True):
+                                c_info, c_foto = st.columns([2, 1])
+                                c_info.write(f"**Status Log:** {r_a.get('status', '-')}")
+                                c_info.write(f"**Waktu Presensi:** {r_a.get('jam', '-')} WITA")
+                                c_info.write(f"**Jarak dari Sekolah:** {r_a.get('jarak_m', '-')} meter")
+                                
+                                foto_url = r_a.get('foto_bukti', '')
+                                if foto_url:
+                                    c_foto.image(foto_url, caption="Foto Bukti Absen", use_container_width=True)
 
 # ==========================================
 # HAK AKSES 2: SUPERADMIN
