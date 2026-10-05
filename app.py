@@ -152,11 +152,9 @@ def get_data_pengaturan():
         return pd.DataFrame([{'batas_masuk': '07:30', 'batas_pulang': '16:00'}])
 
 # Helper Rekap Absensi
-def proses_rekap_absensi(nama_sekolah, start_month, start_year, end_month, end_year, bulan_list):
-    month_map = {m: i+1 for i, m in enumerate(bulan_list)}
-    start_d = f"{start_year}-{month_map[start_month]:02d}-01"
-    last_day = calendar.monthrange(end_year, month_map[end_month])[1]
-    end_d = f"{end_year}-{month_map[end_month]:02d}-{last_day}"
+def proses_rekap_absensi(nama_sekolah, tgl_mulai, tgl_selesai):
+    start_d = tgl_mulai.strftime('%Y-%m-%d')
+    end_d = tgl_selesai.strftime('%Y-%m-%d')
     
     rentang_tanggal = pd.date_range(start=start_d, end=end_d)
     total_hari_kerja = len(rentang_tanggal[rentang_tanggal.dayofweek < 5])
@@ -166,6 +164,34 @@ def proses_rekap_absensi(nama_sekolah, start_month, start_year, end_month, end_y
 
     if df_pegawai.empty:
         return None, total_hari_kerja
+
+    res_absen = supabase.table('absensi').select('nip, status, tanggal').ilike('sekolah', f"%{nama_sekolah.strip()}%").gte('tanggal', start_d).lte('tanggal', end_d).execute()
+    df_absen = pd.DataFrame(res_absen.data) if res_absen.data else pd.DataFrame()
+
+    rekap_data = []
+    for _, emp in df_pegawai.iterrows():
+        emp_nip, emp_name = emp['nip'], emp['name']
+
+        if not df_absen.empty:
+            df_emp_absen = df_absen[df_absen['nip'] == emp_nip]
+            t_masuk = df_emp_absen['status'].str.contains('Masuk', case=False, na=False).sum()
+            t_pulang = df_emp_absen['status'].str.contains('Pulang', case=False, na=False).sum()
+            t_terlambat = df_emp_absen['status'].str.contains('TERLAMBAT', case=False, na=False).sum()
+            t_izin = df_emp_absen['status'].str.contains('Izin', case=False, na=False).sum()
+            hari_ada_catatan = df_emp_absen['tanggal'].nunique()
+        else:
+            t_masuk, t_pulang, t_terlambat, t_izin, hari_ada_catatan = 0, 0, 0, 0, 0
+
+        alpha = max(0, total_hari_kerja - hari_ada_catatan)
+
+        rekap_data.append({
+            'NIP': emp_nip, 'Nama Pegawai': emp_name,
+            'Total Absen Masuk': t_masuk, 'Total Absen Pulang': t_pulang,
+            'Total Terlambat': t_terlambat, 'Total Izin/Manual': t_izin,
+            'Tanpa Keterangan (Alpha)': alpha
+        })
+
+    return pd.DataFrame(rekap_data), total_hari_kerja
 
     res_absen = supabase.table('absensi').select('nip, status, tanggal').ilike('sekolah', f"%{nama_sekolah.strip()}%").gte('tanggal', start_d).lte('tanggal', end_d).execute()
     df_absen = pd.DataFrame(res_absen.data) if res_absen.data else pd.DataFrame()
@@ -501,44 +527,44 @@ elif st.session_state.role == "Superadmin":
     # ------------------------------------------
     with tab_rekap:
         st.markdown("### 📈 Rekap Absensi Keseluruhan Pegawai")
-        st.caption("Tarik rekap data absensi semua pegawai berdasarkan sekolah dan rentang waktu.")
+        st.caption("Tarik rekap data absensi semua pegawai berdasarkan sekolah dan rentang waktu (Harian/Mingguan/Bulanan).")
 
         with st.form("form_rekap_absensi"):
             sekolah_rekap = st.text_input("Masukkan Nama Sekolah:", placeholder="Contoh: SMAN 1 WAJO", key="input_sekolah_rekap")
 
-            col_m1, col_y1, col_m2, col_y2 = st.columns(4)
-            bulan_list = ["Januari", "Februari", "Maret", "April", "Mei", "Juni", "Juli", "Agustus", "September", "Oktober", "November", "Desember"]
-            tahun_list = list(range(2024, 2031))
-
-            with col_m1:
-                start_month = st.selectbox("Dari Bulan", bulan_list, index=7, key="sm_rekap")
-            with col_y1:
-                start_year = st.selectbox("Tahun Mulai", tahun_list, index=2, key="sy_rekap")
-            with col_m2:
-                end_month = st.selectbox("Sampai Bulan", bulan_list, index=11, key="em_rekap")
-            with col_y2:
-                end_year = st.selectbox("Tahun Selesai", tahun_list, index=2, key="ey_rekap")
+            col_tgl1, col_tgl2 = st.columns(2)
+            with col_tgl1:
+                tgl_mulai_rekap = st.date_input("Dari Tanggal", datetime.date.today(), key="tm_rekap")
+            with col_tgl2:
+                tgl_selesai_rekap = st.date_input("Sampai Tanggal", datetime.date.today(), key="ts_rekap")
 
             btn_rekap = st.form_submit_button("🔍 Tampilkan Rekap")
 
         if btn_rekap:
             if not sekolah_rekap.strip():
                 st.warning("Silakan masukkan nama sekolah terlebih dahulu.")
+            elif tgl_mulai_rekap > tgl_selesai_rekap:
+                st.error("Tanggal selesai tidak boleh lebih awal dari tanggal mulai.")
             else:
                 try:
-                    df_final, total_hari_kerja = proses_rekap_absensi(sekolah_rekap, start_month, start_year, end_month, end_year, bulan_list)
+                    df_final, total_hari_kerja = proses_rekap_absensi(sekolah_rekap, tgl_mulai_rekap, tgl_selesai_rekap)
                     if df_final is None or df_final.empty:
                         st.info(f"Tidak ada pegawai ditemukan di: **{sekolah_rekap}**")
                     else:
-                        st.success(f"✅ Data berhasil ditarik. Total Hari Kerja: **{total_hari_kerja} Hari**")
+                        st.success(f"✅ Data berhasil ditarik. Total Hari Kerja (Senin-Jumat): **{total_hari_kerja} Hari**")
                         st.dataframe(df_final, use_container_width=True)
 
-                        csv_data = df_final.to_csv(index=False).encode('utf-8')
+                        # --- Ubah Download ke Excel ---
+                        buffer_rekap = io.BytesIO()
+                        with pd.ExcelWriter(buffer_rekap, engine='openpyxl') as writer:
+                            df_final.to_excel(writer, index=False, sheet_name='Rekap_Absensi')
+                        
                         st.download_button(
-                            label="📥 Download Rekap (CSV)",
-                            data=csv_data,
-                            file_name=f"Rekap_{sekolah_rekap}_{start_month}{start_year}-{end_month}{end_year}.csv",
-                            mime="text/csv", key="dl_rekap_main"
+                            label="📥 Download Rekap (Excel)",
+                            data=buffer_rekap.getvalue(),
+                            file_name=f"Rekap_{sekolah_rekap}_{tgl_mulai_rekap.strftime('%d%m%Y')}-{tgl_selesai_rekap.strftime('%d%m%Y')}.xlsx",
+                            mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", 
+                            key="dl_rekap_excel"
                         )
                 except Exception as e:
                     st.error(f"Terjadi kesalahan: {e}")
@@ -553,27 +579,22 @@ elif st.session_state.role == "Superadmin":
         with st.form("form_indisipliner"):
             sekolah_indi = st.text_input("Masukkan Nama Sekolah:", placeholder="Contoh: SMAN 1 WAJO", key="input_sekolah_indi")
 
-            col_m1, col_y1, col_m2, col_y2 = st.columns(4)
-            bulan_list = ["Januari", "Februari", "Maret", "April", "Mei", "Juni", "Juli", "Agustus", "September", "Oktober", "November", "Desember"]
-            tahun_list = list(range(2024, 2031))
-
-            with col_m1:
-                start_month_i = st.selectbox("Dari Bulan", bulan_list, index=7, key="sm_indi")
-            with col_y1:
-                start_year_i = st.selectbox("Tahun Mulai", tahun_list, index=2, key="sy_indi")
-            with col_m2:
-                end_month_i = st.selectbox("Sampai Bulan", bulan_list, index=11, key="em_indi")
-            with col_y2:
-                end_year_i = st.selectbox("Tahun Selesai", tahun_list, index=2, key="ey_indi")
+            col_tgl1_i, col_tgl2_i = st.columns(2)
+            with col_tgl1_i:
+                tgl_mulai_indi = st.date_input("Dari Tanggal", datetime.date.today(), key="tm_indi")
+            with col_tgl2_i:
+                tgl_selesai_indi = st.date_input("Sampai Tanggal", datetime.date.today(), key="ts_indi")
 
             btn_indi = st.form_submit_button("🚨 Tampilkan Laporan Indisipliner")
 
         if btn_indi:
             if not sekolah_indi.strip():
                 st.warning("Silakan masukkan nama sekolah terlebih dahulu.")
+            elif tgl_mulai_indi > tgl_selesai_indi:
+                st.error("Tanggal selesai tidak boleh lebih awal dari tanggal mulai.")
             else:
                 try:
-                    df_res, _ = proses_rekap_absensi(sekolah_indi, start_month_i, start_year_i, end_month_i, end_year_i, bulan_list)
+                    df_res, _ = proses_rekap_absensi(sekolah_indi, tgl_mulai_indi, tgl_selesai_indi)
                     if df_res is None or df_res.empty:
                         st.info(f"Tidak ada pegawai ditemukan di: **{sekolah_indi}**")
                     else:
@@ -585,12 +606,17 @@ elif st.session_state.role == "Superadmin":
                             st.error(f"⚠️ Ditemukan **{len(df_indisipliner)} Pegawai** dengan catatan Tanpa Keterangan (Alpha) ≥ 1 hari!")
                             st.dataframe(df_indisipliner, use_container_width=True)
                             
-                            csv_indi = df_indisipliner.to_csv(index=False).encode('utf-8')
+                            # --- Ubah Download ke Excel ---
+                            buffer_indi = io.BytesIO()
+                            with pd.ExcelWriter(buffer_indi, engine='openpyxl') as writer:
+                                df_indisipliner.to_excel(writer, index=False, sheet_name='Indisipliner')
+                            
                             st.download_button(
-                                label="📥 Download Laporan Indisipliner (CSV)",
-                                data=csv_indi,
-                                file_name=f"Indisipliner_{sekolah_indi}_{start_month_i}{start_year_i}-{end_month_i}{end_year_i}.csv",
-                                mime="text/csv", key="dl_indi_main"
+                                label="📥 Download Laporan Indisipliner (Excel)",
+                                data=buffer_indi.getvalue(),
+                                file_name=f"Indisipliner_{sekolah_indi}_{tgl_mulai_indi.strftime('%d%m%Y')}-{tgl_selesai_indi.strftime('%d%m%Y')}.xlsx",
+                                mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", 
+                                key="dl_indi_excel"
                             )
                 except Exception as e:
                     st.error(f"Terjadi kesalahan: {e}")
