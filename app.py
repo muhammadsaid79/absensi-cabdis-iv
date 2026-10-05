@@ -232,6 +232,7 @@ for key_state, val in {
     'last_checked_nip_dash': None,
     'last_searched_school_pc': None,
     'menu_unlocked': False,
+    'admin_dashboard_unlocked': False,
     'edit_nip_target': None,
     'show_photo_nip': None
 }.items():
@@ -263,6 +264,7 @@ def logout():
     st.session_state.logout_triggered = True 
     st.session_state.wajah_terverifikasi = False 
     st.session_state.menu_unlocked = False
+    st.session_state.admin_dashboard_unlocked = False
     st.session_state.edit_nip_target = None
     st.session_state.show_photo_nip = None
     
@@ -433,16 +435,32 @@ if st.session_state.role == "Admin":
     # MENU 2: DASHBOARD CEK ABSENSI PEGAWAI
     # ------------------------------------------
     with tab_dashboard:
-        st.markdown("### 📊 Dashboard Cek Absensi Pegawai")
-        st.caption("Masukkan NIP pegawai dan pilih tanggal untuk mengecek status absensi.")
-        
-        col_d1, col_d2 = st.columns([2, 1])
-        with col_d1:
-            nip_check_input = st.text_input("Masukkan NIP Pegawai:", placeholder="Contoh: 198001012005011001", key="nip_check_dashboard")
-        with col_d2:
-            tgl_check_input = st.date_input("Pilih Tanggal:", datetime.date.today(), key="tgl_check_dashboard")
+        if not st.session_state.get('admin_dashboard_unlocked', False):
+            st.warning("🔒 Menu Dashboard Cek Absensi dikunci untuk menghemat Kuota Egress & Query.")
+            pw_dash_admin = st.text_input("Masukkan Sandi Khusus:", type="password", key="pw_dash_admin")
+            if st.button("🔓 Buka Dashboard", key="btn_buka_dash_admin", type="primary"):
+                if pw_dash_admin == "SandiMenu2026*":
+                    st.session_state['admin_dashboard_unlocked'] = True
+                    st.success("✅ Dashboard terbuka!")
+                    time.sleep(0.5)
+                    st.rerun()
+                else:
+                    st.error("❌ Sandi salah!")
+        else:
+            if st.button("🔒 Kunci Kembali Dashboard", key="btn_lock_again_dash_admin"):
+                st.session_state['admin_dashboard_unlocked'] = False
+                st.rerun()
+
+            st.markdown("### 📊 Dashboard Cek Absensi Pegawai")
+            st.caption("Masukkan NIP pegawai dan pilih tanggal untuk mengecek status absensi.")
             
-        btn_cek_dash = st.button("🔍 Cek Status Absensi", type="primary", use_container_width=True, key="btn_cek_absensi_dash")
+            col_d1, col_d2 = st.columns([2, 1])
+            with col_d1:
+                nip_check_input = st.text_input("Masukkan NIP Pegawai:", placeholder="Contoh: 198001012005011001", key="nip_check_dashboard")
+            with col_d2:
+                tgl_check_input = st.date_input("Pilih Tanggal:", datetime.date.today(), key="tgl_check_dashboard")
+                
+            btn_cek_dash = st.button("🔍 Cek Status Absensi", type="primary", use_container_width=True, key="btn_cek_absensi_dash")
         
         if btn_cek_dash:
             if nip_check_input.strip():
