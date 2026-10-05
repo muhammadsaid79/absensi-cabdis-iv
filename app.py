@@ -958,12 +958,9 @@ elif st.session_state.role == "Superadmin":
                         st.rerun()
 
     # ------------------------------------------
-    # 7. TAB IZIN (TERKUNCI)
+    # 7. TAB IZIN
     # ------------------------------------------
     with tab_izin:
-        if not st.session_state['menu_unlocked']:
-            tampilkan_form_kunci("Izin")
-        else:
             st.markdown("### Input Izin / Surat (Bypass)")
             nip_input_izin = st.text_input("NIP Pegawai:")
             if st.button("Input Surat Kosong/Izin") and nip_input_izin:
@@ -971,16 +968,13 @@ elif st.session_state.role == "Superadmin":
                 st.success("Izin dicatat!")
 
     # ------------------------------------------
-    # 8. TAB DATABASE (TERKUNCI)
+    # 8. TAB DATABASE
     # ------------------------------------------
     with tab_database:
-        if not st.session_state['menu_unlocked']:
-            tampilkan_form_kunci("Database")
-        else:
             st.markdown("### 🚨 Database Clean Up")
             if st.button("🖼️️ Hapus Semua Foto (Teks Aman)", type="primary"):
                 supabase.table('absensi').update({'foto_bukti': ''}).neq('foto_bukti', '').execute()
-                st.success("Foto fisik berhasil diputus dari database (Hemat Egress).")
+                st.success("Foto fisik berhasil diputus dari database.")
                 
             st.markdown("---")
             st.markdown("### 🗑 Hapus Data Absensi Harian")
