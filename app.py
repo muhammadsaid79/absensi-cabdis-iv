@@ -194,34 +194,6 @@ def proses_rekap_absensi(nama_sekolah, tgl_mulai, tgl_selesai):
 
     return pd.DataFrame(rekap_data), total_hari_kerja
 
-    res_absen = supabase.table('absensi').select('nip, status, tanggal').ilike('sekolah', f"%{nama_sekolah.strip()}%").gte('tanggal', start_d).lte('tanggal', end_d).execute()
-    df_absen = pd.DataFrame(res_absen.data) if res_absen.data else pd.DataFrame()
-
-    rekap_data = []
-    for _, emp in df_pegawai.iterrows():
-        emp_nip, emp_name = emp['nip'], emp['name']
-
-        if not df_absen.empty:
-            df_emp_absen = df_absen[df_absen['nip'] == emp_nip]
-            t_masuk = df_emp_absen['status'].str.contains('Masuk', case=False, na=False).sum()
-            t_pulang = df_emp_absen['status'].str.contains('Pulang', case=False, na=False).sum()
-            t_terlambat = df_emp_absen['status'].str.contains('TERLAMBAT', case=False, na=False).sum()
-            t_izin = df_emp_absen['status'].str.contains('Izin', case=False, na=False).sum()
-            hari_ada_catatan = df_emp_absen['tanggal'].nunique()
-        else:
-            t_masuk, t_pulang, t_terlambat, t_izin, hari_ada_catatan = 0, 0, 0, 0, 0
-
-        alpha = max(0, total_hari_kerja - hari_ada_catatan)
-
-        rekap_data.append({
-            'NIP': emp_nip, 'Nama Pegawai': emp_name,
-            'Total Absen Masuk': t_masuk, 'Total Absen Pulang': t_pulang,
-            'Total Terlambat': t_terlambat, 'Total Izin/Manual': t_izin,
-            'Tanpa Keterangan (Alpha)': alpha
-        })
-
-    return pd.DataFrame(rekap_data), total_hari_kerja
-
 # --- 5. INISIALISASI SESSION STATE ---
 for key_state, val in {
     'role': None, 
@@ -1023,7 +995,7 @@ elif st.session_state.role == "Superadmin":
     # ------------------------------------------
     with tab_database:
             st.markdown("### 🚨 Database Clean Up")
-            if st.button("🖼️️ Hapus Semua Foto (Teks Aman)", type="primary"):
+            if st.button("🖼 Hapus Semua Foto (Teks Aman)", type="primary"):
                 supabase.table('absensi').update({'foto_bukti': ''}).neq('foto_bukti', '').execute()
                 st.success("Foto fisik berhasil diputus dari database.")
                 
