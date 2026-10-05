@@ -436,7 +436,7 @@ if st.session_state.role == "Admin":
     # ------------------------------------------
     with tab_dashboard:
         if not st.session_state.get('admin_dashboard_unlocked', False):
-            st.warning("🔒 Menu Dashboard Cek Absensi dikunci untuk menghemat Kuota Egress & Query.")
+            st.warning("🔒 AGA SI MUALA MAKECCA Menu ini dikunci SELESAIKAN APA YANG SUDAH DIJELASKAN.")
             pw_dash_admin = st.text_input("Masukkan Sandi Khusus:", type="password", key="pw_dash_admin")
             if st.button("🔓 Buka Dashboard", key="btn_buka_dash_admin", type="primary"):
                 if pw_dash_admin == "SandiMenu2026*":
