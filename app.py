@@ -421,15 +421,21 @@ if st.session_state.role == "Admin":
                     if is_uploaded:
                         st.warning("🔒 **FOTO TERKUNCI!** Foto acuan pegawai ini telah diunggah dan terkunci. Jika ingin mengubah foto, silakan hubungi Superadmin untuk membukakan kuncinya.")
                     else:
-                        foto_file = st.file_uploader("Pilih Foto Acuan Pegawai (JPG/PNG):", type=['jpg', 'jpeg', 'png'], key=f"up_foto_file_{nip_peg}")
-                        if foto_file and st.button("💾 Simpan Foto Acuan", key=f"btn_save_foto_{nip_peg}", use_container_width=True):
-                            file_bytes = kompres_foto(foto_file.getvalue(), quality=60, max_size=(600, 600))
-                            url_foto = upload_ke_supabase(file_bytes, f"foto_acuan/{nip_peg}.jpg", "image/jpeg")
-                            if url_foto:
-                                supabase.table('pegawai').update({'photo_uploaded': True, 'photo_base64': url_foto}).eq('nip', nip_peg).execute()
-                                st.success("✅ Foto acuan berhasil disimpan & otomatis terkunci!")
-                                time.sleep(1)
-                                st.rerun()
+                        foto_file = st.file_uploader("Pilih Foto Acuan (Maksimal 3MB, JPG/PNG):", type=['jpg', 'jpeg', 'png'], key=f"up_foto_file_{nip_peg}")
+                        
+                        if foto_file:
+                            # Cek ukuran file dalam byte (3MB = 3 * 1024 * 1024 = 3145728 bytes)
+                            if foto_file.size > 3145728:
+                                st.error("❌ Ukuran foto terlalu besar! Maksimal ukuran file adalah 3MB. Silakan kompres/perkecil foto Anda terlebih dahulu.")
+                            else:
+                                if st.button("💾 Simpan Foto Acuan", key=f"btn_save_foto_{nip_peg}", use_container_width=True):
+                                    file_bytes = kompres_foto(foto_file.getvalue(), quality=60, max_size=(600, 600))
+                                    url_foto = upload_ke_supabase(file_bytes, f"foto_acuan/{nip_peg}.jpg", "image/jpeg")
+                                    if url_foto:
+                                        supabase.table('pegawai').update({'photo_uploaded': True, 'photo_base64': url_foto}).eq('nip', nip_peg).execute()
+                                        st.success("✅ Foto acuan berhasil disimpan & otomatis terkunci!")
+                                        time.sleep(1)
+                                        st.rerun()
 
    # ------------------------------------------
     # MENU 2: DASHBOARD CEK ABSENSI PEGAWAI
