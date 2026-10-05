@@ -580,41 +580,29 @@
             btnDatang.disabled = true;
             btnPulang.disabled = true;
 
-            let tglSekarang = "";
-            let jamSekarang = "";
-
-            try {
-                const response = await fetch('https://worldtimeapi.org/api/timezone/Asia/Makassar');
-                if (!response.ok) throw new Error("Gagal merespons server waktu.");
-                const data = await response.json();
-                
-                tglSekarang = data.datetime.split('T')[0];
-                jamSekarang = data.datetime.split('T')[1].substring(0, 8);
-                
-            } catch (error) {
-                alert("❌ Gagal mendapatkan waktu global jaringan. Pastikan koneksi internet Anda stabil dan coba lagi.");
-                btnDatang.disabled = false;
-                btnPulang.disabled = false;
-                return;
-            }
-
-            const { error } = await db.from('absensi').insert([{
-                nip: nip,
-                nama: namaPegawai,
-                sekolah: sekolahPegawai,
-                tanggal: tglSekarang,
-                jam: jamSekarang,
-                status: jenisStatus,
-                jarak_m: "0",
-                foto_bukti: fotoBase64 || null
-            }]);
+            // Kita tidak lagi mengambil waktu dari worldtimeapi.org
+            // Waktu (tanggal dan jam) akan diisi otomatis oleh server Supabase
+            
+            const { data, error } = await db.from('absensi')
+                .insert([{
+                    nip: nip,
+                    nama: namaPegawai,
+                    sekolah: sekolahPegawai,
+                    status: jenisStatus,
+                    jarak_m: "0",
+                    foto_bukti: fotoBase64 || null
+                    // Kolom 'tanggal' dan 'jam' tidak dikirim dari sini lagi
+                }])
+                .select('tanggal, jam') // Meminta server mengembalikan waktu yang baru saja dicatat
+                .single();
 
             if (error) {
                 alert("Gagal mengirim presensi: " + error.message);
                 btnDatang.disabled = false;
                 btnPulang.disabled = false;
             } else {
-                alert(`✅ Presensi ${jenisStatus} Berhasil Dikirim pada ${tglSekarang} Jam ${jamSekarang} WITA!`);
+                // Menampilkan notifikasi sukses beserta waktu dari server Supabase
+                alert(`✅ Presensi ${jenisStatus} Berhasil Dikirim pada ${data.tanggal} Jam ${data.jam} WITA!`);
                 lokasiAwal();
             }
         }
