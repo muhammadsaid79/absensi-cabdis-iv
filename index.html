@@ -449,13 +449,33 @@
             const btnFoto = document.getElementById('btn-foto');
             const aiStatus = document.getElementById('ai-status');
 
-            canvas.width = video.videoWidth || 640;
-            canvas.height = video.videoHeight || 480;
+            // --- AWAL PERUBAHAN KOMPRESI FOTO ---
+            const maxUkuran = 250; // Batas resolusi maksimal gambar dalam piksel
+            let width = video.videoWidth || 320;
+            let height = video.videoHeight || 240;
+
+            // Menjaga rasio proporsi foto agar tidak terdistorsi (gepeng)
+            if (width > height) {
+                if (width > maxUkuran) {
+                    height = Math.round((height * maxUkuran) / width);
+                    width = maxUkuran;
+                }
+            } else {
+                if (height > maxUkuran) {
+                    width = Math.round((width * maxUkuran) / height);
+                    height = maxUkuran;
+                }
+            }
+
+            canvas.width = width;
+            canvas.height = height;
             
             const context = canvas.getContext('2d');
-            context.drawImage(video, 0, 0, canvas.width, canvas.height);
+            context.drawImage(video, 0, 0, width, height);
             
-            fotoBase64 = canvas.toDataURL('image/jpeg', 0.8);
+            // Mengubah canvas menjadi string Base64 format JPEG dengan kompresi kualitas 30% (0.3)
+            fotoBase64 = canvas.toDataURL('image/jpeg', 0.3);
+            // --- AKHIR PERUBAHAN KOMPRESI FOTO ---
 
             preview.src = fotoBase64;
             video.classList.add('hidden');
