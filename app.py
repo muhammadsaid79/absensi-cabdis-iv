@@ -157,38 +157,53 @@ def proses_rekap_absensi(nama_sekolah, tgl_mulai, tgl_selesai):
     start_d = tgl_mulai.strftime('%Y-%m-%d')
     end_d = tgl_selesai.strftime('%Y-%m-%d')
     
+    # 1. Hitung hari kerja (Senin-Jumat)
     rentang_tanggal = pd.date_range(start=start_d, end=end_d)
     total_hari_kerja = len(rentang_tanggal[rentang_tanggal.dayofweek < 5])
 
+    # 2. Ambil data identitas pegawai (Tetap)
     res_pegawai = supabase.table('pegawai').select('nip, name, school_name').ilike('school_name', f"%{nama_sekolah.strip()}%").execute()
     df_pegawai = pd.DataFrame(res_pegawai.data) if res_pegawai.data else pd.DataFrame()
 
     if df_pegawai.empty:
         return None, total_hari_kerja
 
-    res_absen = supabase.table('absensi').select('nip, status, tanggal').ilike('sekolah', f"%{nama_sekolah.strip()}%").gte('tanggal', start_d).lte('tanggal', end_d).execute()
-    df_absen = pd.DataFrame(res_absen.data) if res_absen.data else pd.DataFrame()
+    # 3. PANGGIL FUNGSI MESIN HITUNG DARI SUPABASE (Sangat Ringan!)
+    res_rekap = supabase.rpc('rekap_absensi_sekolah', {
+        'p_sekolah': nama_sekolah.strip(),
+        'p_tgl_mulai': start_d,
+        'p_tgl_selesai': end_d
+    }).execute()
+    
+    df_absen = pd.DataFrame(res_rekap.data) if res_rekap.data else pd.DataFrame()
 
+    # 4. Gabungkan Data Pegawai dan Hasil Rekap dari Server
     rekap_data = []
     for _, emp in df_pegawai.iterrows():
         emp_nip, emp_name = emp['nip'], emp['name']
 
-        if not df_absen.empty:
-            df_emp_absen = df_absen[df_absen['nip'] == emp_nip]
-            t_masuk = df_emp_absen['status'].str.contains('Masuk', case=False, na=False).sum()
-            t_pulang = df_emp_absen['status'].str.contains('Pulang', case=False, na=False).sum()
-            t_terlambat = df_emp_absen['status'].str.contains('TERLAMBAT', case=False, na=False).sum()
-            t_izin = df_emp_absen['status'].str.contains('Izin', case=False, na=False).sum()
-            hari_ada_catatan = df_emp_absen['tanggal'].nunique()
+        if not df_absen.empty and emp_nip in df_absen['nip'].values:
+            # Ambil hasil rekap untuk NIP ini
+            row_rekap = df_absen[df_absen['nip'] == emp_nip].iloc[0]
+            t_masuk = int(row_rekap['total_masuk'])
+            t_pulang = int(row_rekap['total_pulang'])
+            t_terlambat = int(row_rekap['total_terlambat'])
+            t_izin = int(row_rekap['total_izin'])
+            hari_ada_catatan = int(row_rekap['hari_hadir'])
         else:
+            # Jika tidak ada sama sekali di tabel rekap
             t_masuk, t_pulang, t_terlambat, t_izin, hari_ada_catatan = 0, 0, 0, 0, 0
 
+        # Hitung Alpha (Tanpa Keterangan)
         alpha = max(0, total_hari_kerja - hari_ada_catatan)
 
         rekap_data.append({
-            'NIP': emp_nip, 'Nama Pegawai': emp_name,
-            'Total Absen Masuk': t_masuk, 'Total Absen Pulang': t_pulang,
-            'Total Terlambat': t_terlambat, 'Total Izin/Manual': t_izin,
+            'NIP': emp_nip, 
+            'Nama Pegawai': emp_name,
+            'Total Absen Masuk': t_masuk, 
+            'Total Absen Pulang': t_pulang,
+            'Total Terlambat': t_terlambat, 
+            'Total Izin/Manual': t_izin,
             'Tanpa Keterangan (Alpha)': alpha
         })
 
