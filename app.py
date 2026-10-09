@@ -1012,19 +1012,79 @@ elif st.session_state.role == "Superadmin":
     # 8. TAB DATABASE
     # ------------------------------------------
     with tab_database:
-            st.markdown("### 🚨 Database Clean Up")
-            if st.button("🖼 Hapus Semua Foto (Teks Aman)", type="primary"):
-                supabase.table('absensi').update({'foto_bukti': ''}).neq('foto_bukti', '').execute()
-                st.success("Foto fisik berhasil diputus dari database.")
-                
-            st.markdown("---")
-            st.markdown("### 🗑 Hapus Data Absensi Harian")
-            tgl_hapus = st.date_input("Pilih Tanggal Absensi yang akan dihapus:")
-            if st.button(f"Hapus Absensi Tanggal {tgl_hapus.strftime('%d-%m-%Y')}"):
-                supabase.table('absensi').delete().eq('tanggal', tgl_hapus.strftime('%Y-%m-%d')).execute()
-                st.success(f"Seluruh data absensi pada tanggal {tgl_hapus.strftime('%d-%m-%Y')} berhasil dihapus permanen!")
-                time.sleep(1)
-                st.rerun()
+        st.markdown("### 🚨 Kelola & Backup Database")
+
+        # --- FITUR 1: BACKUP DATA ABSENSI ---
+        st.markdown("#### 📥 Backup Data Absensi")
+        st.caption("Tarik seluruh raw data absensi berdasarkan rentang waktu untuk diunduh sebagai file CSV sebelum Anda menghapusnya.")
+        
+        col_b1, col_b2 = st.columns(2)
+        with col_b1:
+            tgl_mulai_backup = st.date_input("Dari Tanggal (Backup):", datetime.date.today() - datetime.timedelta(days=30))
+        with col_b2:
+            tgl_selesai_backup = st.date_input("Sampai Tanggal (Backup):", datetime.date.today())
+
+        if st.button("🔄 Tarik Data Backup", type="secondary"):
+            if tgl_mulai_backup > tgl_selesai_backup:
+                st.error("Tanggal selesai tidak boleh lebih awal dari tanggal mulai.")
+            else:
+                try:
+                    res_backup = supabase.table('absensi').select('*') \
+                        .gte('tanggal', tgl_mulai_backup.strftime('%Y-%m-%d')) \
+                        .lte('tanggal', tgl_selesai_backup.strftime('%Y-%m-%d')) \
+                        .execute()
+                        
+                    df_backup = pd.DataFrame(res_backup.data) if res_backup.data else pd.DataFrame()
+
+                    if not df_backup.empty:
+                        buffer_backup = io.BytesIO()
+                        df_backup.to_csv(buffer_backup, index=False)
+                        st.success(f"✅ Ditemukan {len(df_backup)} baris data. Silakan unduh file backup di bawah ini.")
+                        
+                        st.download_button(
+                            label="💾 Download File Backup (.csv)",
+                            data=buffer_backup.getvalue(),
+                            file_name=f"Backup_Database_{tgl_mulai_backup.strftime('%d%m%Y')}-{tgl_selesai_backup.strftime('%d%m%Y')}.csv",
+                            mime="text/csv",
+                            key="dl_backup_csv"
+                        )
+                    else:
+                        st.warning("⚠️ Tidak ada data absensi pada rentang tanggal tersebut.")
+                except Exception as e:
+                    st.error(f"Gagal menarik data backup: {e}")
+
+        st.markdown("---")
+
+        # --- FITUR 2: HAPUS REKAP MINGGUAN / BULANAN ---
+        st.markdown("#### 🗑 Hapus Data Absensi (Mingguan/Bulanan)")
+        st.caption("Pilih rentang waktu absensi yang ingin dibersihkan secara permanen dari Supabase.")
+        
+        col_h1, col_h2 = st.columns(2)
+        with col_h1:
+            tgl_mulai_hapus = st.date_input("Hapus Dari Tanggal:", datetime.date.today() - datetime.timedelta(days=30), key="tm_hapus")
+        with col_h2:
+            tgl_selesai_hapus = st.date_input("Hapus Sampai Tanggal:", datetime.date.today(), key="ts_hapus")
+
+        # Fitur pengaman: wajib mengetik HAPUS
+        konfirmasi_hapus = st.text_input("Ketik 'HAPUS' (huruf kapital) untuk mengonfirmasi penghapusan permanen:")
+
+        if st.button("⚠️ Hapus Permanen Rentang Waktu Ini", type="primary"):
+            if tgl_mulai_hapus > tgl_selesai_hapus:
+                st.error("Tanggal batas akhir tidak boleh lebih awal dari tanggal mulai.")
+            elif konfirmasi_hapus != "HAPUS":
+                st.error("❌ Anda harus mengetik 'HAPUS' pada kolom konfirmasi untuk melanjutkan proses ini.")
+            else:
+                try:
+                    supabase.table('absensi').delete() \
+                        .gte('tanggal', tgl_mulai_hapus.strftime('%Y-%m-%d')) \
+                        .lte('tanggal', tgl_selesai_hapus.strftime('%Y-%m-%d')) \
+                        .execute()
+                        
+                    st.success(f"✅ Data absensi dari tanggal {tgl_mulai_hapus.strftime('%d-%m-%Y')} hingga {tgl_selesai_hapus.strftime('%d-%m-%Y')} telah dihapus permanen!")
+                    time.sleep(1.5)
+                    st.rerun()
+                except Exception as e:
+                    st.error(f"Gagal menghapus data: {e}")
 
     # ------------------------------------------
     # 9. TAB JAM (TERKUNCI)
