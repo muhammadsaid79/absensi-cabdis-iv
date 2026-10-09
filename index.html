@@ -251,7 +251,7 @@
                 localStorage.removeItem('sekolah_terdaftar');
                 sekolahPerangkatTerdaftar = null;
                 statusBox.className = "mb-4 p-2.5 bg-red-50 border border-red-200 rounded-lg text-center text-xs font-semibold text-red-800 flex items-center justify-between";
-                statusText.innerHTML = "❌ Akses PC Dicabut oleh Superadmin";
+                statusText.innerHTML = "❌ Akses PC Dicabut oleh Admin Cabdis Wil IV";
                 loginSection.classList.add('hidden');
                 lockedSection.classList.remove('hidden');
             } else {
@@ -296,7 +296,7 @@
             }
 
             if (data.status === 'TERPAKAI') {
-                alert("⚠️ Kunci ini SUDAH TERPAKAI di PC lain!\n\nSatu kunci hanya untuk 1 PC. Silakan gunakan kode kunci PC lainnya yang diberikan oleh Superadmin.");
+                alert("⚠️ Kunci ini SUDAH TERPAKAI di PC lain!\n\nSatu kunci hanya untuk 1 PC. Silakan gunakan kode kunci PC lainnya yang diberikan oleh Admin Cabdis Wil IV.");
                 return;
             }
 
