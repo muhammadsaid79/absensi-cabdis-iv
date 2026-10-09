@@ -270,7 +270,8 @@ if st.session_state.role is None:
                 is_valid = False
                 assigned_school = "Semua Sekolah"
                 if not df_adm.empty and 'username' in df_adm.columns:
-                    match = df_adm[(df_adm['username'] == input_user_admin) & (df_adm['password'] == pwd)]
+                    # Menambahkan .strip() untuk mencegah error karena spasi
+                    match = df_adm[(df_adm['username'] == input_user_admin.strip()) & (df_adm['password'] == pwd)]
                     if not match.empty:
                         is_valid = True
                         assigned_school = match.iloc[0]['sekolah']
@@ -965,6 +966,7 @@ elif st.session_state.role == "Superadmin":
                 if st.form_submit_button("Simpan Admin"):
                     if new_user and new_pass:
                         supabase.table('admins').insert({'username': new_user, 'password': new_pass, 'sekolah': new_sekolah}).execute()
+                        st.cache_data.clear() # Tambahkan clear cache
                         st.success("Admin berhasil ditambahkan!")
                         time.sleep(1)
                         st.rerun()
@@ -978,6 +980,7 @@ elif st.session_state.role == "Superadmin":
                 with st.expander(f"👤 {row['username']} - {row['sekolah']}"):
                     if st.button("🗑️ Hapus Admin", key=f"del_adm_{row['id']}"):
                         supabase.table('admins').delete().eq('id', row['id']).execute()
+                        st.cache_data.clear() # Tambahkan clear cache
                         st.rerun()
 
     # ------------------------------------------
