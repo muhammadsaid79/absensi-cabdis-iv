@@ -482,7 +482,7 @@
             const aiStatus = document.getElementById('ai-status');
 
             // --- AWAL PERUBAHAN KOMPRESI FOTO ---
-            const maxUkuran = 500; // Batas resolusi maksimal gambar dalam piksel
+            const maxUkuran = 400; // Batas resolusi maksimal gambar dalam piksel
             let width = video.videoWidth || 320;
             let height = video.videoHeight || 240;
 
@@ -506,7 +506,7 @@
             context.drawImage(video, 0, 0, width, height);
             
             // Mengubah canvas menjadi string Base64 format JPEG dengan kompresi kualitas 30% (0.3)
-            fotoBase64 = canvas.toDataURL('image/jpeg', 0.8);
+            fotoBase64 = canvas.toDataURL('image/jpeg', 0.6);
             // --- AKHIR PERUBAHAN KOMPRESI FOTO ---
 
             preview.src = fotoBase64;
@@ -550,7 +550,7 @@
 
                     if (deteksiAcuan) {
                         const jarak = faceapi.euclideanDistance(deteksiKamera.descriptor, deteksiAcuan.descriptor);
-                        if (jarak > 0.45) {
+                        if (jarak > 0.48) {
                             aiStatus.className = "p-2 bg-red-100 text-red-700 rounded text-center text-xs font-semibold";
                             aiStatus.innerHTML = "❌ Wajah TIDAK COCOK dengan foto profil pegawai!";
                             alert("❌ Wajah Anda tidak cocok dengan foto profil pegawai yang terdaftar!");
