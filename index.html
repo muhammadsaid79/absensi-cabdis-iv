@@ -583,16 +583,15 @@
             // Kita tidak lagi mengambil waktu dari worldtimeapi.org
             // Waktu (tanggal dan jam) akan diisi otomatis oleh server Supabase
             
-            const { data, error } = await db.from('absensi')
-                .insert([{
-                    nip: nip,
-                    nama: namaPegawai,
-                    sekolah: sekolahPegawai,
-                    status: jenisStatus,
-                    jarak_m: "0",
-                    foto_bukti: fotoBase64 || null
-                    // Kolom 'tanggal' dan 'jam' tidak dikirim dari sini lagi
-                }])
+            const { data, error } = await supabase
+                .from('absensi')
+                .insert([
+                    {
+                        id_pegawai: idPegawai,
+                        waktu_absen: waktuSekarang,
+                        lokasi: lokasiSekolah
+                    }
+                ]);
                 .select('tanggal, jam') // Meminta server mengembalikan waktu yang baru saja dicatat
                 .single();
 
