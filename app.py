@@ -698,10 +698,13 @@ elif st.session_state.role == "Superadmin":
                 if not nama_sekolah_clean:
                     st.warning("⚠️ Silahkan masukkan Nama Sekolah terlebih dahulu!")
                 else:
-                    prefix = "".join(e for e in nama_sekolah_clean if e.isalnum()).upper()
-                    kunci_1 = f"{prefix}-PC1"
-                    kunci_2 = f"{prefix}-PC2"
-                    kunci_3 = f"{prefix}-PC3"
+                    # Ambil maksimal 8 huruf pertama dari nama sekolah agar kunci tidak kepanjangan
+                    prefix = "".join(e for e in nama_sekolah_clean if e.isalnum()).upper()[:8]
+                    
+                    # Generate 5 karakter acak unik dengan UUID
+                    kunci_1 = f"{prefix}-{uuid.uuid4().hex[:5].upper()}"
+                    kunci_2 = f"{prefix}-{uuid.uuid4().hex[:5].upper()}"
+                    kunci_3 = f"{prefix}-{uuid.uuid4().hex[:5].upper()}"
 
                     records = [
                         {"kunci": kunci_1, "sekolah": nama_sekolah_clean, "status": "BELUM_TERPAKAI"},
@@ -710,10 +713,11 @@ elif st.session_state.role == "Superadmin":
                     ]
 
                     try:
+                        # Sistem akan menambah kunci baru tanpa menghapus kunci lama yang sudah ada di database
                         supabase.table('kunci_perangkat').upsert(records, on_conflict='kunci').execute()
-                        st.success(f"✅ Berhasil membuat 3 Kunci PC untuk **{nama_sekolah_clean}**!")
+                        st.success(f"✅ Berhasil membuat 3 Kunci PC BARU untuk **{nama_sekolah_clean}**! (Kunci lama yang sudah terdaftar tetap aman)")
                         st.session_state.last_searched_school_pc = nama_sekolah_clean
-                        time.sleep(1)
+                        time.sleep(1.5)
                         st.rerun()
                     except Exception as e:
                         st.error(f"❌ Gagal membuat kunci: {e}")
