@@ -165,6 +165,22 @@ def parse_jam_str(jam_val):
             return None
     return None
 
+def hitung_selisih_menit(jam_aktual, jam_batas, jenis):
+    """Fungsi pembantu untuk menghitung selisih keterlambatan atau cepat pulang dalam menit"""
+    try:
+        t_aktual = datetime.datetime.strptime(jam_aktual, '%H:%M')
+        t_batas = datetime.datetime.strptime(jam_batas, '%H:%M')
+        
+        if jenis == "terlambat":
+            diff = t_aktual - t_batas
+        else: # cepat pulang
+            diff = t_batas - t_aktual
+            
+        menit = int(diff.total_seconds() / 60)
+        return menit if menit > 0 else 0
+    except Exception:
+        return 0
+
 # Helper Rekap Absensi Berdasarkan Pengaturan Jam
 def proses_rekap_absensi(nama_sekolah, tgl_mulai, tgl_selesai):
     start_d = tgl_mulai.strftime('%Y-%m-%d')
@@ -221,10 +237,10 @@ def proses_rekap_absensi(nama_sekolah, tgl_mulai, tgl_selesai):
 
                 if status_raw == 'DATANG':
                     if jam_clean and jam_clean > b_masuk_clean:
-                        t_terlambat += 1
+                        t_terlambat += hitung_selisih_menit(jam_clean, b_masuk_clean, "terlambat")
                 elif status_raw == 'PULANG':
                     if jam_clean and jam_clean < b_pulang_clean:
-                        t_cepat_pulang += 1
+                        t_cepat_pulang += hitung_selisih_menit(jam_clean, b_pulang_clean, "cepat_pulang")
                 else:
                     # Status Izin, Cuti, Sakit, DL, atau Manual
                     t_izin += 1
@@ -236,8 +252,8 @@ def proses_rekap_absensi(nama_sekolah, tgl_mulai, tgl_selesai):
             'NIP': emp_nip, 
             'Nama Pegawai': emp_name,
             'Nama Sekolah': emp_school,
-            'Total Terlambat': t_terlambat,
-            'Total Cepat Pulang': t_cepat_pulang,
+            'Total Terlambat (Menit)': t_terlambat,
+            'Total Cepat Pulang (Menit)': t_cepat_pulang,
             'Total Izin/Cuti/Sakit/DL': t_izin,
             'Tanpa Keterangan': alpha
         })
