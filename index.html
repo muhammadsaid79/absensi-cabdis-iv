@@ -202,6 +202,30 @@
         let isAiLoaded = false;
         const MODEL_URL = './models';
 
+        // --- VARIABEL GPS & RADIUS SEKOLAH ---
+        let sekLat = null;
+        let sekLng = null;
+        let sekRadius = 100;
+        let jarakUserKeSekolah = 0;
+        let userAccuracy = 0;
+        let lokasiValid = false;
+
+        // FUNGSI HAVERSINE (MENGHITUNG JARAK METER DARI FRONTEND - HEMAT KUOTA)
+        function hitungJarakMeter(lat1, lon1, lat2, lon2) {
+            const R = 6371e3; // Radius bumi dalam meter
+            const p1 = lat1 * Math.PI / 180;
+            const p2 = lat2 * Math.PI / 180;
+            const deltaP = (lat2 - lat1) * Math.PI / 180;
+            const deltaLon = (lon2 - lon1) * Math.PI / 180;
+
+            const a = Math.sin(deltaP / 2) * Math.sin(deltaP / 2) +
+                      Math.cos(p1) * Math.cos(p2) *
+                      Math.sin(deltaLon / 2) * Math.sin(deltaLon / 2);
+            const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+
+            return Math.floor(R * c);
+        }
+
         // 1. VERIFIKASI PERANGKAT TERDAFTAR DENGAN SISTEM CACHE
         async function verifikasiPerangkat() {
             const statusBox = document.getElementById('device-status-box');
@@ -352,7 +376,7 @@
             muatModelAI();
         });
 
-        // 3. PENCARIAN PEGAWAI + OPTIMASI MEMORI LOKAL
+        // 3. PENCARIAN PEGAWAI + OPTIMASI MEMORI LOKAL + CACHE RADIUS SEKOLAH
         async function cekPegawai() {
             if (!sekolahPerangkatTerdaftar) {
                 alert("🔒 Akses Ditolak! PC ini belum terdaftar sebagai PC Resmi Sekolah.");
@@ -415,6 +439,40 @@
                 return;
             }
 
+            // --- TARIK KOORDINAT & RADIUS SEKOLAH (DENGAN CACHE 24 JAM UNTUK HEMAT KUOTA) ---
+            const cacheSekLat = localStorage.getItem(`lat_${sekolahPegawai}`);
+            const cacheSekLng = localStorage.getItem(`lng_${sekolahPegawai}`);
+            const cacheSekRad = localStorage.getItem(`rad_${sekolahPegawai}`);
+            const cacheWaktuSek = localStorage.getItem(`waktu_sekolah_${sekolahPegawai}`);
+            const waktuSekarang = new Date().getTime();
+
+            if (cacheSekLat && cacheSekLng && cacheSekRad && cacheWaktuSek && (waktuSekarang - parseInt(cacheWaktuSek) < 86400000)) {
+                sekLat = parseFloat(cacheSekLat);
+                sekLng = parseFloat(cacheSekLng);
+                sekRadius = parseInt(cacheSekRad);
+            } else {
+                try {
+                    const { data: dataSekolah } = await db
+                        .from('sekolah')
+                        .select('lat, lng, radius_m')
+                        .ilike('school_name', sekolahPegawai.trim())
+                        .single();
+
+                    if (dataSekolah) {
+                        sekLat = dataSekolah.lat ? parseFloat(dataSekolah.lat) : 0;
+                        sekLng = dataSekolah.lng ? parseFloat(dataSekolah.lng) : 0;
+                        sekRadius = dataSekolah.radius_m ? parseInt(dataSekolah.radius_m) : 100;
+
+                        localStorage.setItem(`lat_${sekolahPegawai}`, sekLat);
+                        localStorage.setItem(`lng_${sekolahPegawai}`, sekLng);
+                        localStorage.setItem(`rad_${sekolahPegawai}`, sekRadius);
+                        localStorage.setItem(`waktu_sekolah_${sekolahPegawai}`, waktuSekarang.toString());
+                    }
+                } catch (eSek) {
+                    console.warn("Gagal mengambil data koordinat sekolah:", eSek);
+                }
+            }
+
             btn.innerText = "Cari Data Pegawai";
             btn.disabled = false;
 
@@ -438,6 +496,13 @@
             localStorage.removeItem(`sekolah_${nip}`);
             localStorage.removeItem(`foto_acuan_${nip}`);
 
+            if (sekolahPegawai) {
+                localStorage.removeItem(`lat_${sekolahPegawai}`);
+                localStorage.removeItem(`lng_${sekolahPegawai}`);
+                localStorage.removeItem(`rad_${sekolahPegawai}`);
+                localStorage.removeItem(`waktu_sekolah_${sekolahPegawai}`);
+            }
+
             alert("Memori lokal dibersihkan! Sistem akan mengambil data & foto profil terbaru dari database Supabase.");
             await cekPegawai();
         }
@@ -456,21 +521,58 @@
         }
 
         function dapatkanGPS() {
+            const gpsBox = document.getElementById('gps-status');
+            lokasiValid = false;
+
             if ("geolocation" in navigator) {
+                gpsBox.innerHTML = "⏳ Mendapatkan lokasi presisi GPS...";
+
                 navigator.geolocation.getCurrentPosition(
                     (position) => {
                         userLat = position.coords.latitude;
                         userLng = position.coords.longitude;
-                        document.getElementById('gps-status').innerHTML = `
-                            <span class="text-green-700 font-bold">Terdeteksi ✅</span><br>
-                            <span class="text-[10px] text-gray-500">Lat: ${userLat.toFixed(5)}, Lng: ${userLng.toFixed(5)}</span>
-                        `;
+                        userAccuracy = position.coords.accuracy;
+
+                        // EVALUASI RADIUS & ANTI FAKE-GPS
+                        if (sekLat !== null && sekLng !== null && (sekLat !== 0 || sekLng !== 0)) {
+                            jarakUserKeSekolah = hitungJarakMeter(userLat, userLng, sekLat, sekLng);
+
+                            if (jarakUserKeSekolah <= sekRadius) {
+                                lokasiValid = true;
+                                gpsBox.innerHTML = `
+                                    <span class="text-emerald-700 font-bold">Terdeteksi di Dalam Radius Sekolah ✅</span><br>
+                                    <span class="text-[10px] text-slate-600">Jarak: <strong>${jarakUserKeSekolah} meter</strong> (Maks Radius: ${sekRadius}m) | Akurasi GPS: ${Math.round(userAccuracy)}m</span>
+                                `;
+                            } else {
+                                lokasiValid = false;
+                                gpsBox.innerHTML = `
+                                    <span class="text-red-600 font-bold">🚫 DI LUAR RADIUS SEKOLAH (${jarakUserKeSekolah} Meter)</span><br>
+                                    <span class="text-[10px] text-red-500">Anda berada di luar batas radius ${sekRadius}m dari sekolah. Presensi dikunci.</span>
+                                `;
+                            }
+                        } else {
+                            // Jika Superadmin belum menentukan titik lat/lng sekolah (nol)
+                            lokasiValid = true;
+                            jarakUserKeSekolah = 0;
+                            gpsBox.innerHTML = `
+                                <span class="text-emerald-700 font-bold">Terdeteksi ✅ (Titik Sekolah Belum Diset)</span><br>
+                                <span class="text-[10px] text-slate-500">Lat: ${userLat.toFixed(5)}, Lng: ${userLng.toFixed(5)}</span>
+                            `;
+                        }
                     },
                     (error) => {
-                        document.getElementById('gps-status').innerHTML = `<span class="text-red-600 font-bold">Gagal mendeteksi GPS. Aktifkan GPS HP/PC!</span>`;
+                        lokasiValid = false;
+                        gpsBox.innerHTML = `<span class="text-red-600 font-bold">❌ Gagal mendeteksi GPS. Aktifkan GPS Perangkat & Izinkan Akses Lokasi!</span>`;
                     },
-                    { enableHighAccuracy: true }
+                    { 
+                        enableHighAccuracy: true, 
+                        maximumAge: 0, // Memaksa browser membaca GPS fisik saat ini, menolak fake/mock GPS lama
+                        timeout: 10000 
+                    }
                 );
+            } else {
+                lokasiValid = false;
+                gpsBox.innerHTML = `<span class="text-red-600 font-bold">Browser tidak mendukung Geolocation GPS.</span>`;
             }
         }
 
@@ -561,6 +663,14 @@
                     console.warn("Gagal memuat foto acuan untuk komparasi:", e);
                 }
 
+                // CHECK POINT 2: VALIDASI LOKASI GPS RADIUS SEKOLAH
+                if (!lokasiValid) {
+                    aiStatus.className = "p-2 bg-red-100 text-red-700 rounded text-center text-xs font-semibold";
+                    aiStatus.innerHTML = "⛔ WAJAH COCOK, TAPI LOKASI DI LUAR RADIUS / GPS TIDAK VALID!";
+                    alert(`⛔ PRESENSI DIBLOKIR!\n\nWajah Anda COCOK, NAMUN posisi Anda berada di luar radius lokasi sekolah (${jarakUserKeSekolah}m dari sekolah, maks ${sekRadius}m) atau GPS belum terdeteksi.\n\nSilakan berada di dalam area sekolah untuk melakukan absen!`);
+                    return;
+                }
+
                 aiStatus.className = "p-2 bg-emerald-100 text-emerald-800 rounded text-center text-xs font-semibold";
                 aiStatus.innerHTML = "✅ AI: Wajah Terverifikasi! Pilih jenis presensi di bawah ini:";
                 
@@ -605,6 +715,11 @@
         }
 
         async function kirimPresensi(jenisStatus) {
+            if (!lokasiValid) {
+                alert(`❌ Presensi ditolak! Lokasi Anda berada di luar radius sekolah (${jarakUserKeSekolah}m) atau GPS belum terdeteksi.`);
+                return;
+            }
+
             const nip = document.getElementById('nip-input').value.trim();
             const btnDatang = document.getElementById('btn-datang');
             const btnPulang = document.getElementById('btn-pulang');
@@ -618,7 +733,7 @@
                     nama: namaPegawai,
                     sekolah: sekolahPegawai,
                     status: jenisStatus,
-                    jarak_m: "0",
+                    jarak_m: jarakUserKeSekolah.toString(),
                     foto_bukti: null
                 }])
                 .select('tanggal, jam')
