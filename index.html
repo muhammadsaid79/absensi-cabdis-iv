@@ -148,7 +148,45 @@
         </div>
     </div>
 
+    <!-- MODAL PESAN KUSTOM (MENGGANTIKAN ALERT BAWAAN BROWSER) -->
+    <div id="modal-custom-pesan" class="hidden fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
+        <div class="bg-white p-5 rounded-xl shadow-xl w-full max-w-sm text-center space-y-3">
+            <h3 id="modal-custom-title" class="text-sm font-bold text-red-600 mb-1">⚠️ PENOLAKAN / PERHATIAN</h3>
+            <p id="modal-custom-text" class="text-xs text-gray-700 whitespace-pre-line leading-relaxed text-left bg-slate-50 p-3 rounded border border-slate-200 font-medium"></p>
+            <button onclick="tutupModalCustom()" class="w-full bg-blue-600 hover:bg-blue-700 text-white text-xs font-bold py-2.5 rounded-lg transition">
+                OK
+            </button>
+        </div>
+    </div>
+
     <script>
+        // ==========================================
+        // OVERRIDE ALERT BAWAAN AGAR TIDAK ADA NAMA GITHUB
+        // ==========================================
+        function tutupModalCustom() {
+            document.getElementById('modal-custom-pesan').classList.add('hidden');
+        }
+
+        window.alert = function(pesan) {
+            const textPesan = String(pesan);
+            const isError = textPesan.includes('❌') || textPesan.includes('🚫') || textPesan.includes('⛔') || textPesan.includes('⚠️') || textPesan.includes('Gagal') || textPesan.includes('Ditolak') || textPesan.includes('BELUM');
+            
+            const modal = document.getElementById('modal-custom-pesan');
+            const isiPesan = document.getElementById('modal-custom-text');
+            const judulPesan = document.getElementById('modal-custom-title');
+            
+            isiPesan.innerText = textPesan;
+            if (isError) {
+                judulPesan.innerText = "⛔ PRESENSI DIBLOKIR / PENOLAKAN";
+                judulPesan.className = "text-sm font-bold text-red-600 mb-1";
+            } else {
+                judulPesan.innerText = "✅ INFORMASI BERHASIL";
+                judulPesan.className = "text-sm font-bold text-emerald-600 mb-1";
+            }
+            modal.classList.remove('hidden');
+        };
+        // ==========================================
+
         // ==========================================
         // FITUR REGISTRASI PWA & TOMBOL INSTALL
         // ==========================================
@@ -249,18 +287,16 @@
             const cachedSekolah = localStorage.getItem('sekolah_terdaftar');
             const waktuSekarang = new Date().getTime();
 
-            // Jika PC sudah dicek dalam 4 jam terakhir (14.400.000 ms), gunakan memori lokal
             if (lastCheck && cachedSekolah && (waktuSekarang - parseInt(lastCheck) < 14400000)) {
                 sekolahPerangkatTerdaftar = cachedSekolah;
                 statusBox.className = "mb-4 p-2.5 bg-emerald-50 border border-emerald-200 rounded-lg text-center text-xs font-semibold text-emerald-800 flex items-center justify-between";
                 statusText.innerHTML = `💻 PC Resmi (${savedKey}): <strong>${sekolahPerangkatTerdaftar}</strong> <span class="text-[9px] ml-1 text-emerald-600">(Memori Aktif)</span>`;
                 lockedSection.classList.add('hidden');
                 loginSection.classList.remove('hidden');
-                return; // Menghentikan fungsi di sini agar TIDAK mengonsumsi kuota Supabase
+                return;
             }
             // --------------------------------------------------------
 
-            // Ubah teks saat sedang memanggil server agar pengguna tahu sistem sedang bekerja
             statusText.innerHTML = "💻 Menghubungkan ke Server Database...";
 
             const { data, error } = await db
@@ -281,7 +317,6 @@
             } else {
                 sekolahPerangkatTerdaftar = data.sekolah;
                 
-                // Simpan hasil sukses ke cache selama 4 jam
                 localStorage.setItem('waktu_cek_kunci', waktuSekarang.toString());
                 localStorage.setItem('sekolah_terdaftar', data.sekolah);
 
@@ -338,8 +373,6 @@
             }
 
             localStorage.setItem('kunci_perangkat_sekolah', inputKunci);
-            
-            // Hapus cache lama (jika ada) saat meregistrasi kunci baru agar data langsung segar
             localStorage.removeItem('waktu_cek_kunci');
             localStorage.removeItem('sekolah_terdaftar');
             
@@ -371,7 +404,6 @@
         }
 
         window.addEventListener('DOMContentLoaded', () => {
-            // Berjalan secara paralel (bersamaan) tanpa saling menunggu/memblokir
             verifikasiPerangkat();
             muatModelAI();
         });
@@ -393,7 +425,6 @@
             btn.innerText = "Mencari data...";
             btn.disabled = true;
 
-            // CEK DARI MEMORI LOKAL TERLEBIH DAHULU
             const cacheNama = localStorage.getItem(`nama_${nip}`);
             const cacheSekolah = localStorage.getItem(`sekolah_${nip}`);
             const cacheFoto = localStorage.getItem(`foto_acuan_${nip}`);
@@ -439,7 +470,6 @@
                 return;
             }
 
-            // --- TARIK KOORDINAT & RADIUS SEKOLAH (DENGAN CACHE 24 JAM UNTUK HEMAT KUOTA) ---
             const cacheSekLat = localStorage.getItem(`lat_${sekolahPegawai}`);
             const cacheSekLng = localStorage.getItem(`lng_${sekolahPegawai}`);
             const cacheSekRad = localStorage.getItem(`rad_${sekolahPegawai}`);
@@ -533,7 +563,6 @@
                         userLng = position.coords.longitude;
                         userAccuracy = position.coords.accuracy;
 
-                        // EVALUASI RADIUS & ANTI FAKE-GPS
                         if (sekLat !== null && sekLng !== null && (sekLat !== 0 || sekLng !== 0)) {
                             jarakUserKeSekolah = hitungJarakMeter(userLat, userLng, sekLat, sekLng);
 
@@ -551,7 +580,6 @@
                                 `;
                             }
                         } else {
-                            // Jika Superadmin belum menentukan titik lat/lng sekolah (nol)
                             lokasiValid = true;
                             jarakUserKeSekolah = 0;
                             gpsBox.innerHTML = `
@@ -566,7 +594,7 @@
                     },
                     { 
                         enableHighAccuracy: true, 
-                        maximumAge: 0, // Memaksa browser membaca GPS fisik saat ini, menolak fake/mock GPS lama
+                        maximumAge: 0,
                         timeout: 10000 
                     }
                 );
@@ -583,12 +611,10 @@
             const btnFoto = document.getElementById('btn-foto');
             const aiStatus = document.getElementById('ai-status');
 
-            // --- AWAL PERUBAHAN KOMPRESI FOTO ---
-            const maxUkuran = 400; // Batas resolusi maksimal gambar dalam piksel
+            const maxUkuran = 400;
             let width = video.videoWidth || 320;
             let height = video.videoHeight || 240;
 
-            // Menjaga rasio proporsi foto agar tidak terdistorsi (gepeng)
             if (width > height) {
                 if (width > maxUkuran) {
                     height = Math.round((height * maxUkuran) / width);
@@ -607,9 +633,7 @@
             const context = canvas.getContext('2d');
             context.drawImage(video, 0, 0, width, height);
             
-            // Mengubah canvas menjadi string Base64 format JPEG dengan kompresi kualitas 30% (0.3)
             fotoBase64 = canvas.toDataURL('image/jpeg', 0.6);
-            // --- AKHIR PERUBAHAN KOMPRESI FOTO ---
 
             preview.src = fotoBase64;
             video.classList.add('hidden');
@@ -663,7 +687,6 @@
                     console.warn("Gagal memuat foto acuan untuk komparasi:", e);
                 }
 
-                // CHECK POINT 2: VALIDASI LOKASI GPS RADIUS SEKOLAH
                 if (!lokasiValid) {
                     aiStatus.className = "p-2 bg-red-100 text-red-700 rounded text-center text-xs font-semibold";
                     aiStatus.innerHTML = "⛔ WAJAH COCOK, TAPI LOKASI DI LUAR RADIUS / GPS TIDAK VALID!";
