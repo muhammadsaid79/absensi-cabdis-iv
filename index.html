@@ -248,6 +248,7 @@
         let jarakUserKeSekolah = 0;
         let userAccuracy = 0;
         let lokasiValid = false;
+        let isGpsDiwajibkan = true; // TAMBAHAN VARIABEL GLOBAL
 
         // FUNGSI HAVERSINE (MENGHITUNG JARAK METER DARI FRONTEND - HEMAT KUOTA)
         function hitungJarakMeter(lat1, lon1, lat2, lon2) {
@@ -489,14 +490,18 @@
             const cacheSekLng = localStorage.getItem(`lng_${sekolahPegawai}`);
             const cacheSekRad = localStorage.getItem(`rad_${sekolahPegawai}`);
             const cacheWaktuSek = localStorage.getItem(`waktu_sekolah_${sekolahPegawai}`);
+            const cacheGpsWajib = localStorage.getItem('global_gps_wajib'); // CEK CACHE ATURAN GPS
             const waktuSekarang = new Date().getTime();
 
-            if (cacheSekLat && cacheSekLng && cacheSekRad && cacheWaktuSek && (waktuSekarang - parseInt(cacheWaktuSek) < 86400000)) {
+            // CEK APAKAH CACHE LENGKAP DAN MASIH AKTIF (24 JAM)
+            if (cacheSekLat && cacheSekLng && cacheSekRad && cacheGpsWajib !== null && cacheWaktuSek && (waktuSekarang - parseInt(cacheWaktuSek) < 86400000)) {
                 sekLat = parseFloat(cacheSekLat);
                 sekLng = parseFloat(cacheSekLng);
                 sekRadius = parseInt(cacheSekRad);
+                isGpsDiwajibkan = (cacheGpsWajib === 'true');
             } else {
                 try {
+                    // 1. Tarik Data Sekolah (Koordinat & Radius)
                     const { data: dataSekolah } = await db
                         .from('sekolah')
                         .select('lat, lng, radius_m')
@@ -513,8 +518,16 @@
                         localStorage.setItem(`rad_${sekolahPegawai}`, sekRadius);
                         localStorage.setItem(`waktu_sekolah_${sekolahPegawai}`, waktuSekarang.toString());
                     }
+                    
+                    // 2. Tarik Data Pengaturan (Status GPS ON/OFF) - HEMAT KUOTA!
+                    const { data: dataAtur } = await db.from('pengaturan').select('gps_aktif').limit(1).single();
+                    if (dataAtur && dataAtur.gps_aktif !== undefined) {
+                        isGpsDiwajibkan = dataAtur.gps_aktif;
+                        localStorage.setItem('global_gps_wajib', isGpsDiwajibkan.toString());
+                    }
+
                 } catch (eSek) {
-                    console.warn("Gagal mengambil data koordinat sekolah:", eSek);
+                    console.warn("Gagal mengambil data koordinat/pengaturan:", eSek);
                 }
             }
 
@@ -581,13 +594,33 @@
                         if (sekLat !== null && sekLng !== null && (sekLat !== 0 || sekLng !== 0)) {
                             jarakUserKeSekolah = hitungJarakMeter(userLat, userLng, sekLat, sekLng);
 
-                            if (jarakUserKeSekolah <= sekRadius) {
+                            if (sekLat !== null && sekLng !== null && (sekLat !== 0 || sekLng !== 0)) {
+                            jarakUserKeSekolah = hitungJarakMeter(userLat, userLng, sekLat, sekLng);
+
+                            // CEK STATUS SAKELAR DARI SUPERADMIN
+                            if (!isGpsDiwajibkan) {
+                                // JIKA SUPERADMIN MEMATIKAN FITUR GPS (OFF)
+                                lokasiValid = true;
+                                gpsBox.innerHTML = `
+                                    <span class="text-blue-700 font-bold">Terdeteksi (Bypass Radius OFF) ✅</span><br>
+                                    <span class="text-[10px] text-slate-600">Jarak: <strong>${jarakUserKeSekolah} meter</strong> | Validasi batas radius dimatikan Superadmin.</span>
+                                `;
+                            } else if (jarakUserKeSekolah <= sekRadius) {
+                                // JIKA NORMAL (ON) & DALAM RADIUS
                                 lokasiValid = true;
                                 gpsBox.innerHTML = `
                                     <span class="text-emerald-700 font-bold">Terdeteksi di Dalam Radius Sekolah ✅</span><br>
                                     <span class="text-[10px] text-slate-600">Jarak: <strong>${jarakUserKeSekolah} meter</strong> (Maks Radius: ${sekRadius}m) | Akurasi GPS: ${Math.round(userAccuracy)}m</span>
                                 `;
                             } else {
+                                // JIKA NORMAL (ON) TAPI DILUAR RADIUS
+                                lokasiValid = false;
+                                gpsBox.innerHTML = `
+                                    <span class="text-red-600 font-bold">🚫 DI LUAR RADIUS SEKOLAH (${jarakUserKeSekolah} Meter)</span><br>
+                                    <span class="text-[10px] text-red-500">Anda berada di luar batas radius ${sekRadius}m dari sekolah. Presensi dikunci.</span>
+                                `;
+                            }
+                        } else {
                                 lokasiValid = false;
                                 gpsBox.innerHTML = `
                                     <span class="text-red-600 font-bold">🚫 DI LUAR RADIUS SEKOLAH (${jarakUserKeSekolah} Meter)</span><br>
