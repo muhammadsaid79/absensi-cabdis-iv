@@ -141,15 +141,16 @@ def get_data_admin():
 @st.cache_data(ttl=600)
 def get_data_pengaturan():
     try:
-        res = supabase.table('pengaturan').select('batas_masuk, batas_pulang').execute()
+        # Tambahkan query gps_aktif
+        res = supabase.table('pengaturan').select('batas_masuk, batas_pulang, gps_aktif').execute()
         if res.data and len(res.data) > 0:
             return pd.DataFrame(res.data)
         else:
-            default_data = {'batas_masuk': '07:30', 'batas_pulang': '16:00'}
+            default_data = {'batas_masuk': '07:30', 'batas_pulang': '16:00', 'gps_aktif': True}
             supabase.table('pengaturan').insert(default_data).execute()
             return pd.DataFrame([default_data])
     except:
-        return pd.DataFrame([{'batas_masuk': '07:30', 'batas_pulang': '16:00'}])
+        return pd.DataFrame([{'batas_masuk': '07:30', 'batas_pulang': '16:00', 'gps_aktif': True}])
 
 def parse_jam_str(jam_val):
     if not jam_val or str(jam_val).strip() in ['-', 'None', 'nan', '']:
@@ -1131,21 +1132,40 @@ elif st.session_state.role == "Superadmin":
                     st.error(f"Gagal menghapus data: {e}")
 
     # ------------------------------------------
-    # 9. TAB JAM (TERKUNCI)
+    # 9. TAB JAM & GPS (TERKUNCI)
     # ------------------------------------------
     with tab_jam:
         if not st.session_state['menu_unlocked']:
-            tampilkan_form_kunci("Jam")
+            tampilkan_form_kunci("Jam & GPS")
         else:
-            st.markdown("### ⚙ Jam Kerja")
+            st.markdown("### ⚙ Pengaturan Waktu & GPS")
             df_settings = get_data_pengaturan()
             b_in = df_settings['batas_masuk'].iloc[0] if not df_settings.empty else '07:30'
             b_out = df_settings['batas_pulang'].iloc[0] if not df_settings.empty else '16:00'
+            
+            # Tarik setelan status GPS
+            if 'gps_aktif' in df_settings.columns and not pd.isna(df_settings['gps_aktif'].iloc[0]):
+                gps_state = bool(df_settings['gps_aktif'].iloc[0])
+            else:
+                gps_state = True
+
             n_in = st.time_input("Batas Masuk", datetime.datetime.strptime(b_in, '%H:%M').time())
             n_out = st.time_input("Batas Pulang", datetime.datetime.strptime(b_out, '%H:%M').time())
-            if st.button("Simpan Pengaturan"):
-                supabase.table('pengaturan').update({'batas_masuk': n_in.strftime('%H:%M'), 'batas_pulang': n_out.strftime('%H:%M')}).neq('batas_masuk', '').execute()
-                st.cache_data.clear()
-                st.success("✅ Pengaturan jam berhasil diperbarui!")
-                time.sleep(1)
-                st.rerun()
+            
+            st.markdown("---")
+            st.markdown("#### 📍 Pengaturan Fitur Jarak GPS")
+            n_gps = st.checkbox("✅ Aktifkan Validasi Jarak/Radius GPS", value=gps_state, help="Hapus centang (OFF) jika ingin mengabaikan masalah PC yang titik GPS-nya sering meleset. Kunci PC & Wajah akan tetap wajib/jalan.")
+
+            if st.button("💾 Simpan Pengaturan", type="primary"):
+                try:
+                    supabase.table('pengaturan').update({
+                        'batas_masuk': n_in.strftime('%H:%M'), 
+                        'batas_pulang': n_out.strftime('%H:%M'),
+                        'gps_aktif': n_gps
+                    }).neq('batas_masuk', '').execute()
+                    st.cache_data.clear()
+                    st.success("✅ Pengaturan Jam & GPS berhasil diperbarui!")
+                    time.sleep(1)
+                    st.rerun()
+                except Exception as e:
+                    st.error(f"Gagal menyimpan pengaturan: {e}")
