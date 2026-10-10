@@ -1,4 +1,4 @@
-const CACHE_NAME = 'absensi-pwa-v4';
+const CACHE_NAME = 'absensi-pwa-v3';
 
 self.addEventListener('install', (event) => {
     self.skipWaiting();
