@@ -234,6 +234,7 @@
         let namaPegawai = "";
         let sekolahPegawai = "";
         let fotoAcuanPegawai = "";
+        let isCadarPegawai = false;
 
         // VARIABEL PERANGKAT & AI
         let sekolahPerangkatTerdaftar = null;
@@ -428,15 +429,18 @@
             const cacheNama = localStorage.getItem(`nama_${nip}`);
             const cacheSekolah = localStorage.getItem(`sekolah_${nip}`);
             const cacheFoto = localStorage.getItem(`foto_acuan_${nip}`);
+            const cacheCadar = localStorage.getItem(`cadar_${nip}`); // Cek cache cadar
 
-            if (cacheNama && cacheSekolah && cacheFoto !== null) {
+            if (cacheNama && cacheSekolah && cacheFoto !== null && cacheCadar !== null) {
                 namaPegawai = cacheNama;
                 sekolahPegawai = cacheSekolah;
                 fotoAcuanPegawai = (cacheFoto === "KOSONG") ? "" : cacheFoto;
+                isCadarPegawai = (cacheCadar === "true"); // Parse string ke boolean
             } else {
+                // TAMBAHKAN 'is_cadar' pada select query Supabase
                 const { data, error } = await db
                     .from('pegawai')
-                    .select('nip, name, school_name, photo_base64')
+                    .select('nip, name, school_name, photo_base64, is_cadar')
                     .eq('nip', nip)
                     .single();
 
@@ -450,10 +454,12 @@
                 namaPegawai = data.name;
                 sekolahPegawai = data.school_name;
                 fotoAcuanPegawai = data.photo_base64 || "";
+                isCadarPegawai = data.is_cadar === true; // Set variabel
 
                 localStorage.setItem(`nama_${nip}`, namaPegawai);
                 localStorage.setItem(`sekolah_${nip}`, sekolahPegawai);
                 localStorage.setItem(`foto_acuan_${nip}`, fotoAcuanPegawai.trim() !== "" ? fotoAcuanPegawai : "KOSONG");
+                localStorage.setItem(`cadar_${nip}`, isCadarPegawai.toString()); // Simpan ke cache
             }
 
             if (!fotoAcuanPegawai || fotoAcuanPegawai.trim() === "" || fotoAcuanPegawai === "KOSONG" || fotoAcuanPegawai === "NULL") {
@@ -662,6 +668,23 @@
             aiStatus.innerHTML = "🔍 AI sedang mendeteksi & memverifikasi wajah...";
 
             try {
+                // --- LOGIKA BYPASS UNTUK PEGAWAI BERCADAR ---
+                if (isCadarPegawai) {
+                    if (!lokasiValid) {
+                        aiStatus.className = "p-2 bg-red-100 text-red-700 rounded text-center text-xs font-semibold";
+                        aiStatus.innerHTML = "⛔ LOKASI DI LUAR RADIUS / GPS TIDAK VALID!";
+                        alert(`⛔ PRESENSI DIBLOKIR!\n\nPosisi Anda berada di luar radius lokasi sekolah (${jarakUserKeSekolah}m dari sekolah, maks ${sekRadius}m) atau GPS belum terdeteksi.\n\nSilakan berada di dalam area sekolah untuk melakukan absen!`);
+                        return;
+                    }
+
+                    aiStatus.className = "p-2 bg-amber-100 text-amber-800 rounded text-center text-xs font-semibold";
+                    aiStatus.innerHTML = "🧕 Mode Audit Cadar: Wajah dilewati. Menunggu verifikasi Admin Sekolah. Pilih jenis presensi:";
+                    document.getElementById('btn-kirim-container').classList.remove('hidden');
+                    return; // Hentikan proses deteksi AI di sini
+                }
+                // ---------------------------------------------
+
+                // JIKA TIDAK BERCADAR, JALANKAN AI NORMAL
                 const imgKamera = await faceapi.fetchImage(fotoBase64);
                 const deteksiKamera = await faceapi.detectSingleFace(imgKamera).withFaceLandmarks().withFaceDescriptor();
 
