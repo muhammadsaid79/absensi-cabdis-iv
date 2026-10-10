@@ -464,7 +464,16 @@
             }
 
             if (sekolahPegawai.trim().toLowerCase() !== sekolahPerangkatTerdaftar.trim().toLowerCase()) {
-                alert(`🚫 Akses Ditolak!\n\nAnda terdaftar di unit kerja "${sekolahPegawai}", sedangkan PC ini dikunci untuk "${sekolahPerangkatTerdaftar}". Silakan presensi di PC Sekolah Anda!`);
+                alert(`🚫 Akses Ditolak!\n\nMemori PC ini mencatat Anda terdaftar di "${sekolahPegawai}". Jika Admin sudah memindahkan Anda ke "${sekolahPerangkatTerdaftar}", silakan tutup pesan ini lalu klik "Cari Data Pegawai" SEKALI LAGI untuk menyinkronkan data.`);
+                
+                // --- FIX: OTOMATIS HAPUS CACHE LAMA ---
+                // Jika ditolak, sistem menghapus ingatan NIP ini. 
+                // Sehingga saat user klik "Cari Data" kedua kalinya, sistem dipaksa narik data Supabase.
+                localStorage.removeItem(`nama_${nip}`);
+                localStorage.removeItem(`sekolah_${nip}`);
+                localStorage.removeItem(`foto_acuan_${nip}`);
+                // -------------------------------------
+
                 btn.innerText = "Cari Data Pegawai";
                 btn.disabled = false;
                 return;
