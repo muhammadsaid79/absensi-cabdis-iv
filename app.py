@@ -746,26 +746,36 @@ elif st.session_state.role == "Superadmin":
                 if not nama_sekolah_clean:
                     st.warning("⚠️ Silahkan masukkan Nama Sekolah terlebih dahulu!")
                 else:
-                    prefix = "".join(e for e in nama_sekolah_clean if e.isalnum()).upper()[:8]
-                    
-                    kunci_1 = f"{prefix}-{uuid.uuid4().hex[:5].upper()}"
-                    kunci_2 = f"{prefix}-{uuid.uuid4().hex[:5].upper()}"
-                    kunci_3 = f"{prefix}-{uuid.uuid4().hex[:5].upper()}"
-
-                    records = [
-                        {"kunci": kunci_1, "sekolah": nama_sekolah_clean, "status": "BELUM_TERPAKAI"},
-                        {"kunci": kunci_2, "sekolah": nama_sekolah_clean, "status": "BELUM_TERPAKAI"},
-                        {"kunci": kunci_3, "sekolah": nama_sekolah_clean, "status": "BELUM_TERPAKAI"}
-                    ]
-
+                    # TAMBAHAN LOGIKA CEK PC TERPAKAI
                     try:
-                        supabase.table('kunci_perangkat').upsert(records, on_conflict='kunci').execute()
-                        st.success(f"✅ Berhasil membuat 3 Kunci PC BARU untuk **{nama_sekolah_clean}**!")
-                        st.session_state.last_searched_school_pc = nama_sekolah_clean
-                        time.sleep(1.5)
-                        st.rerun()
+                        # Cek di database apakah sekolah ini punya kunci dengan status 'TERPAKAI'
+                        res_cek = supabase.table('kunci_perangkat').select('status').ilike('sekolah', f"%{nama_sekolah_clean}%").eq('status', 'TERPAKAI').execute()
+                        
+                        if res_cek.data and len(res_cek.data) > 0:
+                            # Jika ada PC yang sedang terpakai, tampilkan error dan hentikan proses
+                            st.error(f"🚫 GAGAL GENERATE: Masih ada PC yang berstatus TERPAKAI di unit kerja **{nama_sekolah_clean}**!")
+                            st.warning("💡 Solusi: Silakan klik 'Cari PC Sekolah' lalu hapus terlebih dahulu kunci yang berstatus TERPAKAI sebelum membuat kunci baru.")
+                        else:
+                            # Jika aman (tidak ada yang terpakai), lanjut generate 3 kunci baru
+                            prefix = "".join(e for e in nama_sekolah_clean if e.isalnum()).upper()[:8]
+                            
+                            kunci_1 = f"{prefix}-{uuid.uuid4().hex[:5].upper()}"
+                            kunci_2 = f"{prefix}-{uuid.uuid4().hex[:5].upper()}"
+                            kunci_3 = f"{prefix}-{uuid.uuid4().hex[:5].upper()}"
+
+                            records = [
+                                {"kunci": kunci_1, "sekolah": nama_sekolah_clean, "status": "BELUM_TERPAKAI"},
+                                {"kunci": kunci_2, "sekolah": nama_sekolah_clean, "status": "BELUM_TERPAKAI"},
+                                {"kunci": kunci_3, "sekolah": nama_sekolah_clean, "status": "BELUM_TERPAKAI"}
+                            ]
+
+                            supabase.table('kunci_perangkat').upsert(records, on_conflict='kunci').execute()
+                            st.success(f"✅ Berhasil membuat 3 Kunci PC BARU untuk **{nama_sekolah_clean}**!")
+                            st.session_state.last_searched_school_pc = nama_sekolah_clean
+                            time.sleep(1.5)
+                            st.rerun()
                     except Exception as e:
-                        st.error(f"❌ Gagal membuat kunci: {e}")
+                        st.error(f"❌ Gagal melakukan pengecekan atau pembuatan kunci: {e}")
 
             if btn_cari_pc:
                 if sekolah_input_pc.strip():
