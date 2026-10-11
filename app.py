@@ -214,6 +214,7 @@ def proses_rekap_absensi(nama_sekolah, tgl_mulai, tgl_selesai):
         df_absen = pd.DataFrame()
 
     # 5. Olah data rekap per pegawai
+    # 5. Olah data rekap per pegawai
     rekap_data = []
     for _, emp in df_pegawai.iterrows():
         emp_nip = str(emp['nip']).strip()
@@ -228,23 +229,36 @@ def proses_rekap_absensi(nama_sekolah, tgl_mulai, tgl_selesai):
         if not df_absen.empty and 'nip' in df_absen.columns:
             emp_records = df_absen[df_absen['nip'].astype(str).str.strip() == emp_nip]
             
-            for _, r in emp_records.iterrows():
-                status_raw = str(r.get('status', '')).strip().upper()
-                jam_clean = parse_jam_str(r.get('jam'))
-                tgl_val = r.get('tanggal')
-
-                if tgl_val:
+            # Kelompokkan absensi berdasarkan tanggal untuk mengecek histori harian
+            if not emp_records.empty:
+                for tgl_val, group in emp_records.groupby('tanggal'):
                     hari_hadir_set.add(tgl_val)
-
-                if status_raw == 'DATANG':
-                    if jam_clean and jam_clean > b_masuk_clean:
-                        t_terlambat += hitung_selisih_menit(jam_clean, b_masuk_clean, "terlambat")
-                elif status_raw == 'PULANG':
-                    if jam_clean and jam_clean < b_pulang_clean:
-                        t_cepat_pulang += hitung_selisih_menit(jam_clean, b_pulang_clean, "cepat_pulang")
-                else:
-                    # Status Izin, Cuti, Sakit, DL, atau Manual
-                    t_izin += 1
+                    
+                    status_harian = group['status'].astype(str).str.strip().str.upper().tolist()
+                    
+                    # Jika hari itu statusnya izin/sakit/cuti/DL/manual, langsung dihitung Izin
+                    is_izin = any(s not in ['DATANG', 'PULANG'] for s in status_harian)
+                    if is_izin:
+                        t_izin += 1
+                        continue
+                    
+                    has_datang = False
+                    
+                    for _, r in group.iterrows():
+                        status_raw = str(r.get('status', '')).strip().upper()
+                        jam_clean = parse_jam_str(r.get('jam'))
+                        
+                        if status_raw == 'DATANG':
+                            has_datang = True
+                            if jam_clean and jam_clean > b_masuk_clean:
+                                t_terlambat += hitung_selisih_menit(jam_clean, b_masuk_clean, "terlambat")
+                        elif status_raw == 'PULANG':
+                            if jam_clean and jam_clean < b_pulang_clean:
+                                t_cepat_pulang += hitung_selisih_menit(jam_clean, b_pulang_clean, "cepat_pulang")
+                    
+                    # TAMBAHAN PERHITUNGAN: Jika hari itu hadir (ada absen Pulang) tapi TIDAK absen MASUK
+                    if not has_datang:
+                        t_terlambat += 495
 
         hari_ada_catatan = len(hari_hadir_set)
         alpha = max(0, total_hari_kerja - hari_ada_catatan)
@@ -1050,11 +1064,93 @@ elif st.session_state.role == "Superadmin":
     # 7. TAB IZIN
     # ------------------------------------------
     with tab_izin:
-        st.markdown("### Input Izin / Surat (Bypass)")
-        nip_input_izin = st.text_input("NIP Pegawai:")
-        if st.button("Input Surat Kosong/Izin") and nip_input_izin:
-            supabase.table('absensi').insert({'nip': nip_input_izin.strip(), 'nama': 'Manual', 'sekolah': 'Manual', 'tanggal': datetime.datetime.now().strftime('%Y-%m-%d'), 'jam': '-', 'status': 'Izin'}).execute()
-            st.success("Izin dicatat!")
+        st.markdown("### 📝 Input Izin / Cuti / Sakit / Dinas Luar")
+        st.caption("Cari NIP Pegawai, lengkapi formulir izin, dan upload surat PDF.")
+
+        # Fitur Pencarian Pegawai
+        with st.form("form_cari_nip_izin"):
+            nip_input_izin = st.text_input("Masukkan NIP Pegawai:", placeholder="Ketik NIP lalu tekan enter atau cari")
+            btn_cari_izin = st.form_submit_button("🔍 Cari Pegawai")
+
+        if btn_cari_izin:
+            if nip_input_izin.strip():
+                st.session_state['nip_izin_target'] = nip_input_izin.strip()
+            else:
+                st.session_state['nip_izin_target'] = None
+                st.warning("Silakan masukkan NIP terlebih dahulu.")
+
+        if st.session_state.get('nip_izin_target'):
+            nip_target = st.session_state['nip_izin_target']
+            
+            # Ambil data pegawai dari database
+            try:
+                res_pegawai_izin = supabase.table('pegawai').select('nip, name, school_name').eq('nip', nip_target).execute()
+                df_pegawai_izin = pd.DataFrame(res_pegawai_izin.data) if res_pegawai_izin.data else pd.DataFrame()
+            except Exception as e:
+                df_pegawai_izin = pd.DataFrame()
+
+            if df_pegawai_izin.empty:
+                st.error("⚠️ Data ASN tidak ditemukan di dalam sistem.")
+            else:
+                peg_izin = df_pegawai_izin.iloc[0]
+                st.success(f"👤 Data Ditemukan: **{peg_izin['name']}** ({peg_izin['school_name']})")
+                
+                # Formulir Pengajuan Izin
+                with st.form("form_pengajuan_izin"):
+                    jenis_izin = st.selectbox("Pilih Jenis Izin:", ["Cuti", "Sakit", "Dinas Luar", "Izin Lainnya"])
+                    
+                    col_t1, col_t2 = st.columns(2)
+                    with col_t1:
+                        tgl_mulai_izin = st.date_input("Mulai Tanggal:")
+                    with col_t2:
+                        tgl_selesai_izin = st.date_input("Sampai Tanggal:")
+                        
+                    keterangan_izin = st.text_area("Kolom Isian / Keterangan Izin:")
+                    surat_pdf = st.file_uploader("Upload Surat (Wajib PDF)", type=['pdf'])
+                    
+                    btn_kirim_izin = st.form_submit_button("KIRIM 🚀", type="primary")
+                    
+                    if btn_kirim_izin:
+                        if tgl_mulai_izin > tgl_selesai_izin:
+                            st.error("❌ Tanggal selesai tidak boleh mendahului tanggal mulai.")
+                        elif not surat_pdf:
+                            st.error("❌ Anda harus mengunggah Surat berformat PDF.")
+                        else:
+                            try:
+                                # 1. Upload File Surat PDF
+                                surat_bytes = surat_pdf.getvalue()
+                                timestamp_surat = int(time.time())
+                                file_path = f"surat_izin/{nip_target}_{timestamp_surat}.pdf"
+                                url_surat = upload_ke_supabase(surat_bytes, file_path, "application/pdf")
+                                
+                                # 2. Buat Log Absensi Harian (Iterasi sesuai rentang tanggal)
+                                delta_days = (tgl_selesai_izin - tgl_mulai_izin).days + 1
+                                records_izin = []
+                                
+                                for i in range(delta_days):
+                                    current_date = tgl_mulai_izin + datetime.timedelta(days=i)
+                                    # Abaikan akhir pekan (Sabtu & Minggu) jika tidak ada kewajiban absen
+                                    if current_date.weekday() < 5:
+                                        records_izin.append({
+                                            'nip': nip_target,
+                                            'nama': peg_izin['name'],
+                                            'sekolah': peg_izin['school_name'],
+                                            'tanggal': current_date.strftime('%Y-%m-%d'),
+                                            'jam': '-',
+                                            'status': jenis_izin.upper(),
+                                            'foto_bukti': url_surat # Menyimpan link dokumen sebagai referensi
+                                        })
+                                        
+                                if records_izin:
+                                    supabase.table('absensi').insert(records_izin).execute()
+                                    st.success(f"✅ Pengajuan {jenis_izin} berhasil dikirim dan dicatat untuk {len(records_izin)} hari kerja!")
+                                    st.session_state['nip_izin_target'] = None # Reset sesi
+                                    time.sleep(1.5)
+                                    st.rerun()
+                                else:
+                                    st.warning("⚠️ Rentang tanggal yang dipilih hanya mencakup akhir pekan.")
+                            except Exception as e:
+                                st.error(f"Gagal memproses pengajuan izin: {e}")
 
     # ------------------------------------------
     # 8. TAB DATABASE
