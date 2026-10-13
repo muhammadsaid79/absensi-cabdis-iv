@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Presensi Sekolah Cabdis Wil IV</title>
+    <title>Portal Presensi Pegawai</title>
     
     <!-- LINK MANIFEST PWA & THEME COLOR -->
     <link rel="manifest" href="manifest.json?v=2">
@@ -631,129 +631,11 @@
             }
         }
 
-
-        // ========================================================
-        // TAMBAHAN FITUR LIVENESS DETECTION (ANTI FOTO PALSU)
-        // ========================================================
-        let livenessSelesai = false;
-        let jenisTantangan = "";
-        let tahapMenoleh = false; // Penanda apakah ASN sudah menoleh sebelumnya
-
-        // Fungsi bantu untuk menghitung jarak titik wajah
-        function hitungJarakLiveness(p1, p2) {
-            return Math.sqrt(Math.pow(p1.x - p2.x, 2) + Math.pow(p1.y - p2.y, 2));
-        }
-
         async function ambilFoto() {
-            const btnFoto = document.getElementById('btn-foto');
-            const aiStatus = document.getElementById('ai-status');
-
-            if (!isAiLoaded) {
-                aiStatus.className = "p-2 bg-amber-100 text-amber-800 rounded text-center text-xs font-semibold";
-                aiStatus.innerHTML = "⏳ Menunggu modul AI selesai dimuat...";
-                return;
-            }
-
-            // Jika mode cadar, langsung skip tantangan wajah
-            if (isCadarPegawai) {
-                lanjutkanProsesAsli();
-                return;
-            }
-
-            // Pilih tantangan secara acak
-            const daftarTantangan = ["BERKEDIP", "BUKA MULUT / TERSENYUM", "MENOLEH KE KIRI / KANAN"];
-            jenisTantangan = daftarTantangan[Math.floor(Math.random() * daftarTantangan.length)];
-            
-            livenessSelesai = false;
-            tahapMenoleh = false; // Reset tahap menoleh
-
-            btnFoto.classList.add('hidden');
-            document.getElementById('btn-ulang').classList.remove('hidden');
-            
-            // Tampilkan instruksi ke user
-            aiStatus.className = "p-3 bg-blue-100 border-2 border-blue-500 text-blue-800 rounded-lg text-center text-sm font-bold animate-pulse";
-            aiStatus.innerHTML = `🛡️ BUKTIKAN ANDA ASLI:<br>Silakan <strong>${jenisTantangan}</strong> ke arah kamera!`;
-
-            cekLivenessRealTime();
-        }
-
-        async function cekLivenessRealTime() {
-            if (livenessSelesai) return; // Hentikan loop jika sudah selesai / dibatalkan
-            
-            const video = document.getElementById('webcam');
-            const aiStatus = document.getElementById('ai-status');
-
-            try {
-                // Deteksi wajah langsung dari aliran video
-                const deteksi = await faceapi.detectSingleFace(video).withFaceLandmarks();
-                
-                if (deteksi) {
-                    const points = deteksi.landmarks.positions;
-                    let lolos = false;
-
-                    if (jenisTantangan === "BERKEDIP") {
-                        // Cek kelopak mata tertutup (EAR)
-                        const mataTinggi = hitungJarakLiveness(points[37], points[41]);
-                        const mataLebar = hitungJarakLiveness(points[36], points[39]);
-                        if ((mataTinggi / mataLebar) < 0.22) lolos = true; 
-                    } 
-                    else if (jenisTantangan === "BUKA MULUT / TERSENYUM") {
-                        // Cek jarak bibir atas dan bawah
-                        const mulutTinggi = hitungJarakLiveness(points[51], points[57]);
-                        const mulutLebar = hitungJarakLiveness(points[48], points[54]);
-                        if ((mulutTinggi / mulutLebar) > 0.4) lolos = true;
-                    } 
-                    else if (jenisTantangan === "MENOLEH KE KIRI / KANAN") {
-                        const hidung = points[30];
-                        const pipiKiri = points[2];
-                        const pipiKanan = points[14];
-                        const jarakKiri = hitungJarakLiveness(hidung, pipiKiri);
-                        const jarakKanan = hitungJarakLiveness(hidung, pipiKanan);
-
-                        // Langkah A: Cek apakah ASN sudah menoleh
-                        if (!tahapMenoleh && (jarakKiri < jarakKanan * 0.4 || jarakKanan < jarakKiri * 0.4)) {
-                            tahapMenoleh = true;
-                            aiStatus.innerHTML = "Bagus! Sekarang kembali <strong>HADAP LURUS KE KAMERA</strong>...";
-                        }
-
-                        // Langkah B: Jika sudah menoleh, tunggu sampai posisi wajah kembali simetris (menghadap depan)
-                        if (tahapMenoleh) {
-                            const bedaJarak = Math.abs(jarakKiri - jarakKanan);
-                            if (bedaJarak < 20) { // Toleransi wajah sudah lurus ke depan
-                                lolos = true;
-                            }
-                        }
-                    }
-
-                    // Jika gerakan terdeteksi / wajah sudah lurus
-                    if (lolos) {
-                        livenessSelesai = true;
-                        aiStatus.className = "p-2 bg-emerald-100 border border-emerald-500 text-emerald-800 rounded text-center text-xs font-bold";
-                        aiStatus.innerHTML = "✅ Gerakan Terverifikasi! Sedang memotret...";
-                        
-                        // Beri jeda 0.5 detik agar ekspresi/posisi ASN benar-benar tenang, lalu jepret
-                        setTimeout(lanjutkanProsesAsli, 500); 
-                        return;
-                    }
-                }
-            } catch (e) {
-                // Abaikan error frame dan terus looping
-            }
-
-            // Looping terus (60fps) sampai ASN melakukan gerakan
-            if (!livenessSelesai) {
-                requestAnimationFrame(cekLivenessRealTime);
-            }
-        }
-
-
-        // ========================================================
-        // PROSES ASLI (LOGIKA LAMA DIAMBIL UTUH DARI AMBILFOTO)
-        // ========================================================
-        async function lanjutkanProsesAsli() {
             const video = document.getElementById('webcam');
             const canvas = document.getElementById('canvas');
             const preview = document.getElementById('photo-preview');
+            const btnFoto = document.getElementById('btn-foto');
             const aiStatus = document.getElementById('ai-status');
 
             const maxUkuran = 400;
@@ -784,9 +666,8 @@
             video.classList.add('hidden');
             preview.classList.remove('hidden');
 
-            // Hapus baris ini karena tombol sudah di-handle di fungsi ambilFoto() 
-            // btnFoto.classList.add('hidden');
-            // document.getElementById('btn-ulang').classList.remove('hidden');
+            btnFoto.classList.add('hidden');
+            document.getElementById('btn-ulang').classList.remove('hidden');
             document.getElementById('btn-kirim-container').classList.add('hidden');
 
             if (!isAiLoaded) {
@@ -796,7 +677,161 @@
             }
 
             aiStatus.className = "p-2 bg-blue-100 text-blue-800 rounded text-center text-xs font-semibold animate-pulse";
-            aiStatus.innerHTML = "🔍 AI sedang mencocokkan wajah dengan data server...";
+            aiStatus.innerHTML = "🔍 AI sedang mendeteksi & memverifikasi wajah...";
 
             try {
-                if (isCadar
+                if (isCadarPegawai) {
+                    if (!lokasiValid) {
+                        aiStatus.className = "p-2 bg-red-100 text-red-700 rounded text-center text-xs font-semibold";
+                        aiStatus.innerHTML = "⛔ LOKASI DI LUAR RADIUS / GPS TIDAK VALID!";
+                        alert(`⛔ PRESENSI DIBLOKIR!\n\nPosisi Anda berada di luar radius lokasi sekolah (${jarakUserKeSekolah}m dari sekolah, maks ${sekRadius}m) atau GPS belum terdeteksi.\n\nSilakan berada di dalam area sekolah untuk melakukan absen!`);
+                        return;
+                    }
+
+                    aiStatus.className = "p-2 bg-amber-100 text-amber-800 rounded text-center text-xs font-semibold";
+                    aiStatus.innerHTML = "🧕 Mode Audit Cadar silahkan Pilih jenis presensi:";
+                    document.getElementById('btn-kirim-container').classList.remove('hidden');
+                    return;
+                }
+
+                const imgKamera = await faceapi.fetchImage(fotoBase64);
+                const deteksiKamera = await faceapi.detectSingleFace(imgKamera).withFaceLandmarks().withFaceDescriptor();
+
+                if (!deteksiKamera) {
+                    aiStatus.className = "p-2 bg-red-100 text-red-700 rounded text-center text-xs font-semibold";
+                    aiStatus.innerHTML = "❌ Wajah tidak terdeteksi! Ambil foto ulang dengan wajah menghadap kamera.";
+                    alert("❌ Wajah tidak terdeteksi! Pastikan wajah Anda terlihat jelas.");
+                    return;
+                }
+
+                if (!fotoAcuanPegawai || fotoAcuanPegawai.trim() === "" || fotoAcuanPegawai === "KOSONG" || fotoAcuanPegawai === "NULL") {
+                    aiStatus.className = "p-2 bg-red-100 text-red-700 rounded text-center text-xs font-semibold";
+                    aiStatus.innerHTML = "❌ Wajah TIDAK COCOK (Foto Acuan Kosong)!";
+                    alert("FOTO BELUM DIUPLOAD ADMIN SEKOLAH JIKA SUDAH DIUPLOAD KAMERA TETAP TERTUTUP HUB ADMIN CABANG (MOCHD GAZALI/JEDDAH/GAZA)");
+                    return; 
+                }
+
+                try {
+                    const imgAcuan = await faceapi.fetchImage(fotoAcuanPegawai);
+                    const deteksiAcuan = await faceapi.detectSingleFace(imgAcuan).withFaceLandmarks().withFaceDescriptor();
+
+                    if (deteksiAcuan) {
+                        const jarak = faceapi.euclideanDistance(deteksiKamera.descriptor, deteksiAcuan.descriptor);
+                        if (jarak > 0.48) {
+                            aiStatus.className = "p-2 bg-red-100 text-red-700 rounded text-center text-xs font-semibold";
+                            aiStatus.innerHTML = "❌ Wajah TIDAK COCOK dengan foto profil pegawai!";
+                            alert("❌ Wajah Anda tidak cocok dengan foto profil pegawai yang terdaftar!");
+                            return;
+                        }
+                    }
+                } catch (e) {
+                    console.warn("Gagal memuat foto acuan untuk komparasi:", e);
+                }
+
+                if (!lokasiValid) {
+                    aiStatus.className = "p-2 bg-red-100 text-red-700 rounded text-center text-xs font-semibold";
+                    aiStatus.innerHTML = "⛔ WAJAH COCOK, TAPI LOKASI DI LUAR RADIUS / GPS TIDAK VALID!";
+                    alert(`⛔ PRESENSI DIBLOKIR!\n\nWajah Anda COCOK, NAMUN posisi Anda berada di luar radius lokasi sekolah (${jarakUserKeSekolah}m dari sekolah, maks ${sekRadius}m) atau GPS belum terdeteksi.\n\nSilakan berada di dalam area sekolah untuk melakukan absen!`);
+                    return;
+                }
+
+                aiStatus.className = "p-2 bg-emerald-100 text-emerald-800 rounded text-center text-xs font-semibold";
+                aiStatus.innerHTML = "✅ AI: Wajah Terverifikasi! Pilih jenis presensi di bawah ini:";
+                
+                document.getElementById('btn-kirim-container').classList.remove('hidden');
+
+            } catch (err) {
+                console.error("Error Verifikasi AI:", err);
+                aiStatus.className = "p-2 bg-red-100 text-red-700 rounded text-center text-xs font-semibold";
+                aiStatus.innerHTML = "❌ Terjadi kesalahan saat mendeteksi wajah.";
+                alert("Gagal melakukan verifikasi wajah: " + err.message);
+            }
+        }
+
+        function ulangFoto() {
+            const video = document.getElementById('webcam');
+            const preview = document.getElementById('photo-preview');
+            const aiStatus = document.getElementById('ai-status');
+
+            preview.classList.add('hidden');
+            video.classList.remove('hidden');
+
+            document.getElementById('btn-foto').classList.remove('hidden');
+            document.getElementById('btn-ulang').classList.add('hidden');
+            document.getElementById('btn-kirim-container').classList.add('hidden'); 
+            
+            fotoBase64 = null;
+            if (aiStatus) {
+                aiStatus.className = "p-2 bg-slate-100 border border-slate-200 rounded text-center text-xs text-slate-600 font-medium";
+                aiStatus.innerHTML = "🤖 AI Siap: Posisikan wajah Anda pada kamera.";
+            }
+        }
+
+        function lokasiAwal() {
+            if (videoStream) {
+                videoStream.getTracks().forEach(track => track.stop());
+            }
+            document.getElementById('absen-section').classList.add('hidden');
+            document.getElementById('login-section').classList.remove('hidden');
+            document.getElementById('btn-kirim-container').classList.add('hidden'); 
+            document.getElementById('nip-input').value = '';
+            ulangFoto();
+        }
+
+        async function kirimPresensi(jenisStatus) {
+            if (!lokasiValid) {
+                alert(`❌ Presensi ditolak! Lokasi Anda berada di luar radius sekolah (${jarakUserKeSekolah}m) atau GPS belum terdeteksi.`);
+                return;
+            }
+
+            const nip = document.getElementById('nip-input').value.trim();
+            const btnDatang = document.getElementById('btn-datang');
+            const btnPulang = document.getElementById('btn-pulang');
+            
+            btnDatang.disabled = true;
+            btnPulang.disabled = true;
+            
+            const { data, error } = await db.from('absensi')
+                .insert([{
+                    nip: nip,
+                    nama: namaPegawai,
+                    sekolah: sekolahPegawai,
+                    status: jenisStatus,
+                    jarak_m: jarakUserKeSekolah.toString(),
+                    foto_bukti: null
+                }])
+                .select('tanggal, jam')
+                .single();
+
+            if (error) {
+                alert("Gagal mengirim presensi: " + error.message);
+                btnDatang.disabled = false;
+                btnPulang.disabled = false;
+            } else {
+                alert(`✅ Presensi ${jenisStatus} Berhasil Dikirim pada ${data.tanggal} Jam ${data.jam} WITA!`);
+                lokasiAwal();
+            }
+        }
+
+        // PROTEKSI HALAMAN
+        document.addEventListener('contextmenu', function(e) {
+            e.preventDefault();
+        });
+
+        document.addEventListener('keydown', function(e) {
+            if (e.key === 'F12' || e.keyCode === 123) {
+                e.preventDefault();
+                return false;
+            }
+            if (e.ctrlKey && e.shiftKey && (e.key === 'I' || e.key === 'i' || e.key === 'J' || e.key === 'j' || e.key === 'C' || e.key === 'c')) {
+                e.preventDefault();
+                return false;
+            }
+            if (e.ctrlKey && (e.key === 'u' || e.key === 'U')) {
+                e.preventDefault();
+                return false;
+            }
+        });
+    </script>
+</body>
+</html>
