@@ -932,20 +932,6 @@ elif st.session_state.role == "Superadmin":
                     st.rerun()
                     
             st.markdown("### ✏️ Edit Data Pegawai & Buka Kunci Foto")
-            st.caption("Cari berdasarkan NIP. Data foto hanya akan ditarik dari server jika Anda menekan tombol '🖼️ LIHAT FOTO'.")
-
-            with st.form("form_cari_edit_pegawai"):
-                edit_nip_cari = st.text_input("Masukkan NIP Pegawai yang ingin diedit/dibuka kuncinya:", placeholder="Contoh: 198001012005011001", key="nip_edit_cari")
-                btn_cari_edit = st.form_submit_button("🔍 Cari Pegawai")
-
-            if btn_cari_edit:
-                if edit_nip_cari.strip():
-                    st.session_state.edit_nip_target = edit_nip_cari.strip()
-                    st.session_state.show_photo_nip = None
-                else:
-                    st.session_state.edit_nip_target = None
-                    st.warning("Silahkan masukkan NIP terlebih dahulu.")
-
             if st.session_state.get('edit_nip_target'):
                 target_nip = st.session_state.edit_nip_target
                 try:
@@ -966,11 +952,20 @@ elif st.session_state.role == "Superadmin":
                     if current_photo_uploaded:
                         col_status_f, col_btn_f = st.columns([2, 1])
                         col_status_f.success("📷 Foto acuan sudah terunggah dalam sistem.")
-                        if col_btn_f.button("🖼️ LIHAT FOTO", key=f"btn_liat_foto_{target_nip}"):
-                            st.session_state.show_photo_nip = target_nip
+                        
+                        # Tombol LIHAT FOTO dan GANTI FOTO disusun berdampingan/bertumpuk
+                        with col_btn_f:
+                            if st.button("🖼️ LIHAT FOTO", key=f"btn_liat_foto_{target_nip}", use_container_width=True):
+                                st.session_state.show_photo_nip = target_nip
+                            
+                            # TOMBAL TAMBAHAN: GANTI FOTO DIRECT OLEH SUPERADMIN
+                            if st.button("🔄 GANTI FOTO", key=f"btn_toggle_ganti_{target_nip}", use_container_width=True):
+                                st.session_state[f'show_ganti_{target_nip}'] = not st.session_state.get(f'show_ganti_{target_nip}', False)
                     else:
                         st.info("📷 Pegawai ini belum memiliki foto acuan.")
+                        st.session_state[f'show_ganti_{target_nip}'] = True
 
+                    # 1. Menampilkan Foto jika tombol 'LIHAT FOTO' ditekan
                     if st.session_state.get('show_photo_nip') == target_nip:
                         try:
                             res_photo = supabase.table('pegawai').select('photo_base64').eq('nip', target_nip).execute()
@@ -982,6 +977,26 @@ elif st.session_state.role == "Superadmin":
                         except Exception as e_foto:
                             st.error(f"Gagal menarik data foto: {e_foto}")
 
+                    # 2. Form Upload Foto Langsung oleh Superadmin (jika tombol 'GANTI FOTO' ditekan)
+                    if st.session_state.get(f'show_ganti_{target_nip}'):
+                        with st.expander("📸 Upload / Timpa Foto Acuan Langsung (Akses Superadmin)", expanded=True):
+                            foto_file_super = st.file_uploader("Pilih Foto Acuan Baru (Maksimal 3MB, JPG/PNG):", type=['jpg', 'jpeg', 'png'], key=f"up_foto_super_{target_nip}")
+                            
+                            if foto_file_super:
+                                if foto_file_super.size > 3145728:
+                                    st.error("❌ Ukuran foto terlalu besar! Maksimal ukuran file adalah 3MB.")
+                                else:
+                                    if st.button("💾 Simpan & Timpa Foto Acuan", key=f"btn_save_super_foto_{target_nip}", type="primary", use_container_width=True):
+                                        file_bytes = kompres_foto(foto_file_super.getvalue(), quality=60, max_size=(600, 600))
+                                        url_foto = upload_ke_supabase(file_bytes, f"foto_acuan/{target_nip}.jpg", "image/jpeg")
+                                        if url_foto:
+                                            supabase.table('pegawai').update({'photo_uploaded': True, 'photo_base64': url_foto}).eq('nip', target_nip).execute()
+                                            st.success("✅ Foto acuan berhasil diperbarui dan dikunci secara langsung oleh Superadmin!")
+                                            st.session_state[f'show_ganti_{target_nip}'] = False
+                                            time.sleep(1)
+                                            st.rerun()
+
+                    # Form Update Nama, Sekolah, dan Buka Kunci Foto Manual tetap di bawahnya...
                     with st.form("form_update_pegawai"):
                         edit_nama = st.text_input("Nama Pegawai:", value=emp_edit.get('name', ''))
                         
