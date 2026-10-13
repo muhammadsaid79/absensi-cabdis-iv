@@ -661,7 +661,7 @@
             }
 
             // Pilih tantangan secara acak
-            const daftarTantangan = ["BUKA MULUT / TERSENYUM", "MENOLEH KE KIRI / KANAN"];
+            const daftarTantangan = ["MENOLEH KE KIRI / KANAN"];
             jenisTantangan = daftarTantangan[Math.floor(Math.random() * daftarTantangan.length)];
             
             livenessSelesai = false;
@@ -691,13 +691,7 @@
                     const points = deteksi.landmarks.positions;
                     let lolos = false;
 
-                    if (jenisTantangan === "BUKA MULUT / TERSENYUM") {
-                        // Cek jarak bibir atas dan bawah
-                        const mulutTinggi = hitungJarakLiveness(points[51], points[57]);
-                        const mulutLebar = hitungJarakLiveness(points[48], points[54]);
-                        if ((mulutTinggi / mulutLebar) > 0.4) lolos = true;
-                    } 
-                    else if (jenisTantangan === "MENOLEH KE KIRI / KANAN") {
+                    if (jenisTantangan === "MENOLEH KE KIRI / KANAN") {
                         const hidung = points[30];
                         const pipiKiri = points[2];
                         const pipiKanan = points[14];
