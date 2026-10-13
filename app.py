@@ -243,6 +243,7 @@ def proses_rekap_absensi(nama_sekolah, tgl_mulai, tgl_selesai):
                         continue
                     
                     has_datang = False
+                    has_pulang = False
                     
                     for _, r in group.iterrows():
                         status_raw = str(r.get('status', '')).strip().upper()
@@ -257,8 +258,10 @@ def proses_rekap_absensi(nama_sekolah, tgl_mulai, tgl_selesai):
                                 t_cepat_pulang += hitung_selisih_menit(jam_clean, b_pulang_clean, "cepat_pulang")
                     
                     # TAMBAHAN PERHITUNGAN: Jika hari itu hadir (ada absen Pulang) tapi TIDAK absen MASUK
-                    if not has_datang:
+                    if has_pulang and not has_datang:
                         t_terlambat += 495
+                    if has_datang and not has_pulang:
+                        t_cepat_pulang += 495
 
         hari_ada_catatan = len(hari_hadir_set)
         alpha = max(0, total_hari_kerja - hari_ada_catatan)
