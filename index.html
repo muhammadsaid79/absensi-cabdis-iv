@@ -631,11 +631,129 @@
             }
         }
 
+
+        // ========================================================
+        // TAMBAHAN FITUR LIVENESS DETECTION (ANTI FOTO PALSU)
+        // ========================================================
+        let livenessSelesai = false;
+        let jenisTantangan = "";
+        let tahapMenoleh = false; // Penanda apakah ASN sudah menoleh sebelumnya
+
+        // Fungsi bantu untuk menghitung jarak titik wajah
+        function hitungJarakLiveness(p1, p2) {
+            return Math.sqrt(Math.pow(p1.x - p2.x, 2) + Math.pow(p1.y - p2.y, 2));
+        }
+
         async function ambilFoto() {
+            const btnFoto = document.getElementById('btn-foto');
+            const aiStatus = document.getElementById('ai-status');
+
+            if (!isAiLoaded) {
+                aiStatus.className = "p-2 bg-amber-100 text-amber-800 rounded text-center text-xs font-semibold";
+                aiStatus.innerHTML = "⏳ Menunggu modul AI selesai dimuat...";
+                return;
+            }
+
+            // Jika mode cadar, langsung skip tantangan wajah
+            if (isCadarPegawai) {
+                lanjutkanProsesAsli();
+                return;
+            }
+
+            // Pilih tantangan secara acak
+            const daftarTantangan = ["BERKEDIP", "BUKA MULUT / TERSENYUM", "MENOLEH KE KIRI / KANAN"];
+            jenisTantangan = daftarTantangan[Math.floor(Math.random() * daftarTantangan.length)];
+            
+            livenessSelesai = false;
+            tahapMenoleh = false; // Reset tahap menoleh
+
+            btnFoto.classList.add('hidden');
+            document.getElementById('btn-ulang').classList.remove('hidden');
+            
+            // Tampilkan instruksi ke user
+            aiStatus.className = "p-3 bg-blue-100 border-2 border-blue-500 text-blue-800 rounded-lg text-center text-sm font-bold animate-pulse";
+            aiStatus.innerHTML = `🛡️ BUKTIKAN ANDA ASLI:<br>Silakan <strong>${jenisTantangan}</strong> ke arah kamera!`;
+
+            cekLivenessRealTime();
+        }
+
+        async function cekLivenessRealTime() {
+            if (livenessSelesai) return; // Hentikan loop jika sudah selesai / dibatalkan
+            
+            const video = document.getElementById('webcam');
+            const aiStatus = document.getElementById('ai-status');
+
+            try {
+                // Deteksi wajah langsung dari aliran video
+                const deteksi = await faceapi.detectSingleFace(video).withFaceLandmarks();
+                
+                if (deteksi) {
+                    const points = deteksi.landmarks.positions;
+                    let lolos = false;
+
+                    if (jenisTantangan === "BERKEDIP") {
+                        // Cek kelopak mata tertutup (EAR)
+                        const mataTinggi = hitungJarakLiveness(points[37], points[41]);
+                        const mataLebar = hitungJarakLiveness(points[36], points[39]);
+                        if ((mataTinggi / mataLebar) < 0.22) lolos = true; 
+                    } 
+                    else if (jenisTantangan === "BUKA MULUT / TERSENYUM") {
+                        // Cek jarak bibir atas dan bawah
+                        const mulutTinggi = hitungJarakLiveness(points[51], points[57]);
+                        const mulutLebar = hitungJarakLiveness(points[48], points[54]);
+                        if ((mulutTinggi / mulutLebar) > 0.4) lolos = true;
+                    } 
+                    else if (jenisTantangan === "MENOLEH KE KIRI / KANAN") {
+                        const hidung = points[30];
+                        const pipiKiri = points[2];
+                        const pipiKanan = points[14];
+                        const jarakKiri = hitungJarakLiveness(hidung, pipiKiri);
+                        const jarakKanan = hitungJarakLiveness(hidung, pipiKanan);
+
+                        // Langkah A: Cek apakah ASN sudah menoleh
+                        if (!tahapMenoleh && (jarakKiri < jarakKanan * 0.4 || jarakKanan < jarakKiri * 0.4)) {
+                            tahapMenoleh = true;
+                            aiStatus.innerHTML = "Bagus! Sekarang kembali <strong>HADAP LURUS KE KAMERA</strong>...";
+                        }
+
+                        // Langkah B: Jika sudah menoleh, tunggu sampai posisi wajah kembali simetris (menghadap depan)
+                        if (tahapMenoleh) {
+                            const bedaJarak = Math.abs(jarakKiri - jarakKanan);
+                            if (bedaJarak < 20) { // Toleransi wajah sudah lurus ke depan
+                                lolos = true;
+                            }
+                        }
+                    }
+
+                    // Jika gerakan terdeteksi / wajah sudah lurus
+                    if (lolos) {
+                        livenessSelesai = true;
+                        aiStatus.className = "p-2 bg-emerald-100 border border-emerald-500 text-emerald-800 rounded text-center text-xs font-bold";
+                        aiStatus.innerHTML = "✅ Gerakan Terverifikasi! Sedang memotret...";
+                        
+                        // Beri jeda 0.5 detik agar ekspresi/posisi ASN benar-benar tenang, lalu jepret
+                        setTimeout(lanjutkanProsesAsli, 500); 
+                        return;
+                    }
+                }
+            } catch (e) {
+                // Abaikan error frame dan terus looping
+            }
+
+            // Looping terus (60fps) sampai ASN melakukan gerakan
+            if (!livenessSelesai) {
+                requestAnimationFrame(cekLivenessRealTime);
+            }
+        }
+
+
+        // ========================================================
+        // PROSES ASLI (LOGIKA LAMA DIAMBIL UTUH DARI AMBILFOTO)
+        // ========================================================
+        async function lanjutkanProsesAsli() {
             const video = document.getElementById('webcam');
             const canvas = document.getElementById('canvas');
             const preview = document.getElementById('photo-preview');
-            const btnFoto = document.getElementById('btn-foto');
             const aiStatus = document.getElementById('ai-status');
 
             const maxUkuran = 400;
@@ -666,8 +784,9 @@
             video.classList.add('hidden');
             preview.classList.remove('hidden');
 
-            btnFoto.classList.add('hidden');
-            document.getElementById('btn-ulang').classList.remove('hidden');
+            // Hapus baris ini karena tombol sudah di-handle di fungsi ambilFoto() 
+            // btnFoto.classList.add('hidden');
+            // document.getElementById('btn-ulang').classList.remove('hidden');
             document.getElementById('btn-kirim-container').classList.add('hidden');
 
             if (!isAiLoaded) {
@@ -677,7 +796,7 @@
             }
 
             aiStatus.className = "p-2 bg-blue-100 text-blue-800 rounded text-center text-xs font-semibold animate-pulse";
-            aiStatus.innerHTML = "🔍 AI sedang mendeteksi & memverifikasi wajah...";
+            aiStatus.innerHTML = "🔍 AI sedang mencocokkan wajah dengan data server...";
 
             try {
                 if (isCadarPegawai) {
@@ -699,7 +818,7 @@
 
                 if (!deteksiKamera) {
                     aiStatus.className = "p-2 bg-red-100 text-red-700 rounded text-center text-xs font-semibold";
-                    aiStatus.innerHTML = "❌ Wajah tidak terdeteksi! Ambil foto ulang dengan wajah menghadap kamera.";
+                    aiStatus.innerHTML = "❌ Wajah tidak terdeteksi di foto hasil jepretan!";
                     alert("❌ Wajah tidak terdeteksi! Pastikan wajah Anda terlihat jelas.");
                     return;
                 }
@@ -749,6 +868,9 @@
         }
 
         function ulangFoto() {
+            // Hentikan proses deteksi gerakan jika user membatalkan (klik ulang foto)
+            livenessSelesai = true;
+
             const video = document.getElementById('webcam');
             const preview = document.getElementById('photo-preview');
             const aiStatus = document.getElementById('ai-status');
