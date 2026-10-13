@@ -661,7 +661,7 @@
             }
 
             // Pilih tantangan secara acak
-            const daftarTantangan = ["BERKEDIP", "BUKA MULUT / TERSENYUM", "MENOLEH KE KIRI / KANAN"];
+            const daftarTantangan = ["BUKA MULUT / TERSENYUM", "MENOLEH KE KIRI / KANAN"];
             jenisTantangan = daftarTantangan[Math.floor(Math.random() * daftarTantangan.length)];
             
             livenessSelesai = false;
@@ -691,13 +691,7 @@
                     const points = deteksi.landmarks.positions;
                     let lolos = false;
 
-                    if (jenisTantangan === "BERKEDIP") {
-                        // Cek kelopak mata tertutup (EAR)
-                        const mataTinggi = hitungJarakLiveness(points[37], points[41]);
-                        const mataLebar = hitungJarakLiveness(points[36], points[39]);
-                        if ((mataTinggi / mataLebar) < 0.22) lolos = true; 
-                    } 
-                    else if (jenisTantangan === "BUKA MULUT / TERSENYUM") {
+                    if (jenisTantangan === "BUKA MULUT / TERSENYUM") {
                         // Cek jarak bibir atas dan bawah
                         const mulutTinggi = hitungJarakLiveness(points[51], points[57]);
                         const mulutLebar = hitungJarakLiveness(points[48], points[54]);
