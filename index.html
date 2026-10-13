@@ -654,14 +654,15 @@
                 return;
             }
 
-            // Jika mode cadar, langsung skip tantangan wajah
+            // PENGECUALIAN CADAR: Langsung lolos tanpa tantangan gerakan
             if (isCadarPegawai) {
                 lanjutkanProsesAsli();
                 return;
             }
 
+            // TANTANGAN UNTUK ASN NON-CADAR
             // Pilih tantangan secara acak
-            const daftarTantangan = ["MENOLEH KE KIRI / KANAN"];
+            const daftarTantangan = ["GELENG KE KIRI", "GELENG KE KANAN", "MENGHADAP KE BAWAH"];
             jenisTantangan = daftarTantangan[Math.floor(Math.random() * daftarTantangan.length)];
             
             livenessSelesai = false;
@@ -672,7 +673,7 @@
             
             // Tampilkan instruksi ke user
             aiStatus.className = "p-3 bg-blue-100 border-2 border-blue-500 text-blue-800 rounded-lg text-center text-sm font-bold animate-pulse";
-            aiStatus.innerHTML = `🛡️ BUKTIKAN ANDA ASLI:<br>Silakan <strong>${jenisTantangan}</strong> ke arah kamera!`;
+            aiStatus.innerHTML = `🛡️ BUKTIKAN ANDA ASLI:<br>Silakan <strong>${jenisTantangan}</strong>!`;
 
             cekLivenessRealTime();
         }
@@ -691,7 +692,7 @@
                     const points = deteksi.landmarks.positions;
                     let lolos = false;
 
-                    if (jenisTantangan === "MENOLEH KE KIRI / KANAN") {
+                    if (jenisTantangan === "GELENG KE KIRI" || jenisTantangan === "GELENG KE KANAN") {
                         const hidung = points[30];
                         const pipiKiri = points[2];
                         const pipiKanan = points[14];
@@ -711,6 +712,22 @@
                                 lolos = true;
                             }
                         }
+                    } else if (jenisTantangan === "MENGHADAP KE BAWAH") {
+                         // Deteksi menunduk dengan mengukur jarak pangkal hidung (27) ke ujung hidung (30)
+                         const batasAtasHidung = points[27];
+                         const ujungHidung = points[30];
+                         const jarakHidungVertikal = hitungJarakLiveness(batasAtasHidung, ujungHidung);
+
+                         // Langkah A: Cek apakah ASN menunduk (jarak hidung vertikal memendek)
+                         if (!tahapMenoleh && jarakHidungVertikal < 25) { 
+                             tahapMenoleh = true;
+                             aiStatus.innerHTML = "Bagus! Sekarang kembali <strong>HADAP LURUS KE KAMERA</strong>...";
+                         }
+
+                         // Langkah B: Jika sudah menunduk, tunggu sampai menatap lurus kembali
+                         if (tahapMenoleh && jarakHidungVertikal > 35) {
+                             lolos = true;
+                         }
                     }
 
                     // Jika gerakan terdeteksi / wajah sudah lurus
