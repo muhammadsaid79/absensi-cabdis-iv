@@ -743,40 +743,84 @@ elif st.session_state.role == "Superadmin":
                 except Exception as e:
                     st.error(f"❌ Gagal menyimpan ke database: {e}")
 
-    # ------------------------------------------
+   # ------------------------------------------
     # 4. TAB PC (TERKUNCI)
     # ------------------------------------------
     with tab_pc:
         if not st.session_state['menu_unlocked']:
             tampilkan_form_kunci("PC")
         else:
+            # Injeksi CSS untuk mengubah warna tombol ke-3 (Generate 1 Kunci) menjadi Hijau
+            st.markdown("""
+                <style>
+                div[data-testid="column"]:nth-of-type(3) button {
+                    background-color: #10B981 !important; 
+                    box-shadow: 0 4px 10px rgba(16, 185, 129, 0.3) !important;
+                }
+                div[data-testid="column"]:nth-of-type(3) button:hover {
+                    background-color: #059669 !important;
+                }
+                </style>
+            """, unsafe_allow_html=True)
+
             st.markdown("### 🔑 Kelola & Generate Kunci Perangkat PC")
-            st.caption("Ketik nama sekolah untuk membuat 3 kunci PC baru atau mencari kunci yang sudah ada.")
+            st.caption("Ketik nama sekolah untuk membuat kunci PC baru atau mencari kunci yang sudah ada.")
             
+            # Ambil data sekolah aktif untuk validasi
+            df_sekolah_aktif = get_data_sekolah()
+            daftar_sekolah = df_sekolah_aktif['school_name'].tolist() if not df_sekolah_aktif.empty else []
+
             with st.form("form_pc_superadmin"):
                 sekolah_input_pc = st.text_input("Masukkan Nama Sekolah:", placeholder="Contoh: SMKN 6 WAJO", key="input_sekolah_pc_super")
-                col_b1, col_b2 = st.columns(2)
+                
+                # Ubah menjadi 3 kolom untuk menampung tombol baru
+                col_b1, col_b2, col_b3 = st.columns(3)
                 btn_cari_pc = col_b1.form_submit_button("🔍 Cari PC Sekolah", use_container_width=True)
                 btn_generate_pc = col_b2.form_submit_button("🔑 Generate 3 Kunci PC", type="primary", use_container_width=True)
-                
+                btn_generate_1_pc = col_b3.form_submit_button("➕ GENERATE 1 KUNCI PC", use_container_width=True)
+            
+            # LOGIKA: GENERATE 1 KUNCI PC BARU
+            if btn_generate_1_pc:
+                nama_sekolah_clean = sekolah_input_pc.strip()
+                if not nama_sekolah_clean:
+                    st.warning("⚠️ Silahkan masukkan Nama Sekolah terlebih dahulu!")
+                elif nama_sekolah_clean not in daftar_sekolah:
+                    st.error("NAMA SEKOLAH BELUM ADA LABANTA")
+                else:
+                    try:
+                        prefix = "".join(e for e in nama_sekolah_clean if e.isalnum()).upper()[:8]
+                        kunci_baru = f"{prefix}-{uuid.uuid4().hex[:5].upper()}"
+
+                        # Gunakan .insert() agar hanya menambah 1 kunci tanpa mengganggu yang ada
+                        supabase.table('kunci_perangkat').insert({
+                            "kunci": kunci_baru, 
+                            "sekolah": nama_sekolah_clean, 
+                            "status": "BELUM_TERPAKAI"
+                        }).execute()
+                        
+                        st.success(f"✅ Berhasil menambah 1 Kunci PC BARU untuk **{nama_sekolah_clean}**!")
+                        st.session_state.last_searched_school_pc = nama_sekolah_clean
+                        time.sleep(1.5)
+                        st.rerun()
+                    except Exception as e:
+                        st.error(f"❌ Gagal membuat kunci: {e}")
+
+            # LOGIKA: GENERATE 3 KUNCI PC (LAMA)
             if btn_generate_pc:
                 nama_sekolah_clean = sekolah_input_pc.strip()
                 if not nama_sekolah_clean:
                     st.warning("⚠️ Silahkan masukkan Nama Sekolah terlebih dahulu!")
+                elif nama_sekolah_clean not in daftar_sekolah:
+                    st.error("NAMA SEKOLAH BELUM ADA LABANTA")
                 else:
-                    # TAMBAHAN LOGIKA CEK PC TERPAKAI
                     try:
-                        # Cek di database apakah sekolah ini punya kunci dengan status 'TERPAKAI'
                         res_cek = supabase.table('kunci_perangkat').select('status').ilike('sekolah', f"%{nama_sekolah_clean}%").eq('status', 'TERPAKAI').execute()
                         
                         if res_cek.data and len(res_cek.data) > 0:
-                            # Jika ada PC yang sedang terpakai, tampilkan error dan hentikan proses
                             st.error(f"🚫 GAGAL GENERATE: Masih ada PC yang berstatus TERPAKAI di unit kerja **{nama_sekolah_clean}**!")
                             st.warning("💡 Solusi: Silakan klik 'Cari PC Sekolah' lalu hapus terlebih dahulu kunci yang berstatus TERPAKAI sebelum membuat kunci baru.")
                         else:
-                            # Jika aman (tidak ada yang terpakai), lanjut generate 3 kunci baru
                             prefix = "".join(e for e in nama_sekolah_clean if e.isalnum()).upper()[:8]
-                            
                             kunci_1 = f"{prefix}-{uuid.uuid4().hex[:5].upper()}"
                             kunci_2 = f"{prefix}-{uuid.uuid4().hex[:5].upper()}"
                             kunci_3 = f"{prefix}-{uuid.uuid4().hex[:5].upper()}"
@@ -795,12 +839,15 @@ elif st.session_state.role == "Superadmin":
                     except Exception as e:
                         st.error(f"❌ Gagal melakukan pengecekan atau pembuatan kunci: {e}")
 
+            # LOGIKA: CARI PC
             if btn_cari_pc:
-                if sekolah_input_pc.strip():
-                    st.session_state.last_searched_school_pc = sekolah_input_pc.strip()
+                nama_sekolah_clean = sekolah_input_pc.strip()
+                if not nama_sekolah_clean:
+                    st.warning("⚠️ Silahkan ketik nama sekolah terlebih dahulu.")
+                elif nama_sekolah_clean not in daftar_sekolah:
+                    st.error("NAMA SEKOLAH BELUM ADA LABANTA")
                 else:
-                    st.session_state.last_searched_school_pc = None
-                    st.warning("Silahkan ketik nama sekolah terlebih dahulu.")
+                    st.session_state.last_searched_school_pc = nama_sekolah_clean
                     
             if st.session_state.get('last_searched_school_pc'):
                 nama_sekolah_dicari = st.session_state.last_searched_school_pc
