@@ -248,7 +248,7 @@
         let jarakUserKeSekolah = 0;
         let userAccuracy = 0;
         let lokasiValid = false;
-        let isGpsDiwajibkan = true; // TAMBAHAN VARIABEL GLOBAL
+        let isGpsDiwajibkan = true;
 
         // FUNGSI HAVERSINE (MENGHITUNG JARAK METER DARI FRONTEND - HEMAT KUOTA)
         function hitungJarakMeter(lat1, lon1, lat2, lon2) {
@@ -266,7 +266,7 @@
             return Math.floor(R * c);
         }
 
-        // 1. VERIFIKASI PERANGKAT TERDAFTAR DENGAN SISTEM CACHE
+        // 1. VERIFIKASI PERANGKAT TERDAFTAR DENGAN SISTEM CACHE (1x24 JAM / 86400000 MS)
         async function verifikasiPerangkat() {
             const statusBox = document.getElementById('device-status-box');
             const statusText = document.getElementById('device-status-text');
@@ -284,12 +284,13 @@
                 return;
             }
 
-            // --- SISTEM CACHE (HEMAT KUOTA & MEMPERCEPAT RELOAD) ---
+            // --- SISTEM CACHE 1x24 JAM (86400000 MS) HEMAT KUOTA ---
             const lastCheck = localStorage.getItem('waktu_cek_kunci');
             const cachedSekolah = localStorage.getItem('sekolah_terdaftar');
             const waktuSekarang = new Date().getTime();
 
-            if (lastCheck && cachedSekolah && (waktuSekarang - parseInt(lastCheck) < 14400000)) {
+            // Pengecekan ke Supabase hanya berjalan jika sudah melewati 24 jam (86.400.000 ms)
+            if (lastCheck && cachedSekolah && (waktuSekarang - parseInt(lastCheck) < 86400000)) {
                 sekolahPerangkatTerdaftar = cachedSekolah;
                 statusBox.className = "mb-4 p-2.5 bg-emerald-50 border border-emerald-200 rounded-lg text-center text-xs font-semibold text-emerald-800 flex items-center justify-between";
                 statusText.innerHTML = `💻 PC Resmi (${savedKey}): <strong>${sekolahPerangkatTerdaftar}</strong> <span class="text-[9px] ml-1 text-emerald-600">(Memori Aktif)</span>`;
@@ -430,15 +431,14 @@
             const cacheNama = localStorage.getItem(`nama_${nip}`);
             const cacheSekolah = localStorage.getItem(`sekolah_${nip}`);
             const cacheFoto = localStorage.getItem(`foto_acuan_${nip}`);
-            const cacheCadar = localStorage.getItem(`cadar_${nip}`); // Cek cache cadar
+            const cacheCadar = localStorage.getItem(`cadar_${nip}`);
 
             if (cacheNama && cacheSekolah && cacheFoto !== null && cacheCadar !== null) {
                 namaPegawai = cacheNama;
                 sekolahPegawai = cacheSekolah;
                 fotoAcuanPegawai = (cacheFoto === "KOSONG") ? "" : cacheFoto;
-                isCadarPegawai = (cacheCadar === "true"); // Parse string ke boolean
+                isCadarPegawai = (cacheCadar === "true");
             } else {
-                // TAMBAHKAN 'is_cadar' pada select query Supabase
                 const { data, error } = await db
                     .from('pegawai')
                     .select('nip, name, school_name, photo_base64, is_cadar')
@@ -455,12 +455,12 @@
                 namaPegawai = data.name;
                 sekolahPegawai = data.school_name;
                 fotoAcuanPegawai = data.photo_base64 || "";
-                isCadarPegawai = data.is_cadar === true; // Set variabel
+                isCadarPegawai = data.is_cadar === true;
 
                 localStorage.setItem(`nama_${nip}`, namaPegawai);
                 localStorage.setItem(`sekolah_${nip}`, sekolahPegawai);
                 localStorage.setItem(`foto_acuan_${nip}`, fotoAcuanPegawai.trim() !== "" ? fotoAcuanPegawai : "KOSONG");
-                localStorage.setItem(`cadar_${nip}`, isCadarPegawai.toString()); // Simpan ke cache
+                localStorage.setItem(`cadar_${nip}`, isCadarPegawai.toString());
             }
 
             if (!fotoAcuanPegawai || fotoAcuanPegawai.trim() === "" || fotoAcuanPegawai === "KOSONG" || fotoAcuanPegawai === "NULL") {
@@ -473,13 +473,9 @@
             if (sekolahPegawai.trim().toLowerCase() !== sekolahPerangkatTerdaftar.trim().toLowerCase()) {
                 alert(`🚫 Akses Ditolak!\n\nAnda terdaftar di "${sekolahPegawai}". dan terbaca sudah Mutasi ke "${sekolahPerangkatTerdaftar}", silakan tutup pesan ini lalu klik "Cari Data Pegawai" SEKALI LAGI untuk menyinkronkan data.`);
                 
-                // --- FIX: OTOMATIS HAPUS CACHE LAMA ---
-                // Jika ditolak, sistem menghapus ingatan NIP ini. 
-                // Sehingga saat user klik "Cari Data" kedua kalinya, sistem dipaksa narik data Supabase.
                 localStorage.removeItem(`nama_${nip}`);
                 localStorage.removeItem(`sekolah_${nip}`);
                 localStorage.removeItem(`foto_acuan_${nip}`);
-                // -------------------------------------
 
                 btn.innerText = "Cari Data Pegawai";
                 btn.disabled = false;
@@ -490,10 +486,9 @@
             const cacheSekLng = localStorage.getItem(`lng_${sekolahPegawai}`);
             const cacheSekRad = localStorage.getItem(`rad_${sekolahPegawai}`);
             const cacheWaktuSek = localStorage.getItem(`waktu_sekolah_${sekolahPegawai}`);
-            const cacheGpsWajib = localStorage.getItem('global_gps_wajib'); // CEK CACHE ATURAN GPS
+            const cacheGpsWajib = localStorage.getItem('global_gps_wajib');
             const waktuSekarang = new Date().getTime();
 
-            // CEK APAKAH CACHE LENGKAP DAN MASIH AKTIF (24 JAM)
             if (cacheSekLat && cacheSekLng && cacheSekRad && cacheGpsWajib !== null && cacheWaktuSek && (waktuSekarang - parseInt(cacheWaktuSek) < 86400000)) {
                 sekLat = parseFloat(cacheSekLat);
                 sekLng = parseFloat(cacheSekLng);
@@ -501,7 +496,6 @@
                 isGpsDiwajibkan = (cacheGpsWajib === 'true');
             } else {
                 try {
-                    // 1. Tarik Data Sekolah (Koordinat & Radius)
                     const { data: dataSekolah } = await db
                         .from('sekolah')
                         .select('lat, lng, radius_m')
@@ -519,7 +513,6 @@
                         localStorage.setItem(`waktu_sekolah_${sekolahPegawai}`, waktuSekarang.toString());
                     }
                     
-                    // 2. Tarik Data Pengaturan (Status GPS ON/OFF) - HEMAT KUOTA!
                     const { data: dataAtur } = await db.from('pengaturan').select('gps_aktif').limit(1).single();
                     if (dataAtur && dataAtur.gps_aktif !== undefined) {
                         isGpsDiwajibkan = dataAtur.gps_aktif;
@@ -594,33 +587,19 @@
                         if (sekLat !== null && sekLng !== null && (sekLat !== 0 || sekLng !== 0)) {
                             jarakUserKeSekolah = hitungJarakMeter(userLat, userLng, sekLat, sekLng);
 
-                            if (sekLat !== null && sekLng !== null && (sekLat !== 0 || sekLng !== 0)) {
-                            jarakUserKeSekolah = hitungJarakMeter(userLat, userLng, sekLat, sekLng);
-
-                            // CEK STATUS SAKELAR DARI SUPERADMIN
                             if (!isGpsDiwajibkan) {
-                                // JIKA SUPERADMIN MEMATIKAN FITUR GPS (OFF)
                                 lokasiValid = true;
                                 gpsBox.innerHTML = `
                                     <span class="text-blue-700 font-bold">Terdeteksi (Radius) ✅</span><br>
                                     <span class="text-[10px] text-slate-600">Jarak: Valid.</span>
                                 `;
                             } else if (jarakUserKeSekolah <= sekRadius) {
-                                // JIKA NORMAL (ON) & DALAM RADIUS
                                 lokasiValid = true;
                                 gpsBox.innerHTML = `
                                     <span class="text-emerald-700 font-bold">Terdeteksi di Dalam Radius Sekolah ✅</span><br>
                                     <span class="text-[10px] text-slate-600">Jarak: <strong>${jarakUserKeSekolah} meter</strong> (Maks Radius: ${sekRadius}m) | Akurasi GPS: ${Math.round(userAccuracy)}m</span>
                                 `;
                             } else {
-                                // JIKA NORMAL (ON) TAPI DILUAR RADIUS
-                                lokasiValid = false;
-                                gpsBox.innerHTML = `
-                                    <span class="text-red-600 font-bold">🚫 DI LUAR RADIUS SEKOLAH (${jarakUserKeSekolah} Meter)</span><br>
-                                    <span class="text-[10px] text-red-500">Anda berada di luar batas radius ${sekRadius}m dari sekolah. Presensi dikunci.</span>
-                                `;
-                            }
-                        } else {
                                 lokasiValid = false;
                                 gpsBox.innerHTML = `
                                     <span class="text-red-600 font-bold">🚫 DI LUAR RADIUS SEKOLAH (${jarakUserKeSekolah} Meter)</span><br>
@@ -701,7 +680,6 @@
             aiStatus.innerHTML = "🔍 AI sedang mendeteksi & memverifikasi wajah...";
 
             try {
-                // --- LOGIKA BYPASS UNTUK PEGAWAI BERCADAR ---
                 if (isCadarPegawai) {
                     if (!lokasiValid) {
                         aiStatus.className = "p-2 bg-red-100 text-red-700 rounded text-center text-xs font-semibold";
@@ -713,11 +691,9 @@
                     aiStatus.className = "p-2 bg-amber-100 text-amber-800 rounded text-center text-xs font-semibold";
                     aiStatus.innerHTML = "🧕 Mode Audit Cadar silahkan Pilih jenis presensi:";
                     document.getElementById('btn-kirim-container').classList.remove('hidden');
-                    return; // Hentikan proses deteksi AI di sini
+                    return;
                 }
-                // ---------------------------------------------
 
-                // JIKA TIDAK BERCADAR, JALANKAN AI NORMAL
                 const imgKamera = await faceapi.fetchImage(fotoBase64);
                 const deteksiKamera = await faceapi.detectSingleFace(imgKamera).withFaceLandmarks().withFaceDescriptor();
 
