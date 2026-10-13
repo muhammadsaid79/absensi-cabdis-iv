@@ -1,4 +1,4 @@
-const CACHE_NAME = 'absensi-pwa-v8'; 
+const CACHE_NAME = 'absensi-pwa-v9'; 
 
 self.addEventListener('install', (event) => {
     // Memaksa Service Worker baru untuk langsung mengambil alih
