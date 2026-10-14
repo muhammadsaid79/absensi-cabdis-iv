@@ -979,6 +979,16 @@ elif st.session_state.role == "Superadmin":
                     st.rerun()
                     
             st.markdown("### ✏️ Edit Data Pegawai & Buka Kunci Foto")
+            with st.form("form_cari_edit_pegawai"):
+                cari_nip_edit = st.text_input("Masukkan NIP Pegawai yang ingin diedit:")
+                btn_cari_edit = st.form_submit_button("🔍 Cari Pegawai untuk Diedit")
+                
+                if btn_cari_edit:
+                    if cari_nip_edit.strip():
+                        st.session_state.edit_nip_target = cari_nip_edit.strip()
+                    else:
+                        st.session_state.edit_nip_target = None
+                        st.warning("Silakan masukkan NIP terlebih dahulu.")
             if st.session_state.get('edit_nip_target'):
                 target_nip = st.session_state.edit_nip_target
                 try:
