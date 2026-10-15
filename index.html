@@ -1,4 +1,54 @@
-MAAF PAK/IBU
-APLIKASI DALAM TAHAP PERBAIKAN
-DI KARENAKAN ABSENSI MEMKAN WAKTU 3 MENIT SAMPAI DENGAN 5 MENIT 
-UNTUK MENGHINDARI MENGANGGU PROSES BELAJAR MENGAJAR SILAHKAN KEMBALI KE ABSEN MANUAL
+<!DOCTYPE html>
+<html lang="id">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Portal Presensi Pegawai</title>
+    
+    <!-- LINK MANIFEST PWA & THEME COLOR -->
+    <link rel="manifest" href="manifest.json?v=2">
+    <meta name="theme-color" content="#1e3a8a">
+    
+    <!-- FAVICON -->
+    <link rel="icon" type="image/png" href="favicon.png">
+    
+    <!-- FONT TAMBAHAN: PLUS JAKARTA SANS UNTUK TAMPILAN LEBIH MODERN -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@600;700;800&display=swap" rel="stylesheet">
+    
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+    <!-- MODUL AI FACE DETECTION & RECOGNITION -->
+    <script defer src="https://cdn.jsdelivr.net/npm/face-api.js@0.22.2/dist/face-api.min.js"></script>
+
+    <style>
+        /* Menerapkan font baru ke seluruh halaman */
+        body {
+            font-family: 'Plus Jakarta Sans', sans-serif;
+        }
+    </style>
+</head>
+<body class="bg-slate-100 min-h-screen flex items-center justify-center p-4">
+    <div class="bg-white p-6 rounded-xl shadow-lg w-full max-w-md border border-slate-200">
+        
+        <!-- ========================================== -->
+        <!-- BAGIAN HEADER BARU (LOGO PEMPROV & JUDUL)  -->
+        <!-- ========================================== -->
+        <div class="flex flex-col items-center justify-center text-center mb-5 mt-2">
+            <!-- Logo Pemprov Sulsel -->
+            <img 
+                src="logo-sulsel.png" 
+                alt="Logo Pemprov Sulsel" 
+                class="w-16 md:w-20 h-auto mb-3 drop-shadow-md"
+            >
+            
+            <!-- Judul Utama -->
+            <h1 class="text-xl md:text-2xl font-extrabold text-blue-900 tracking-wide uppercase mb-1">
+                APLIKASI SEDANG TAHAP PERBAIKAN
+            </h1>
+            
+            <!-- Sub-judul -->
+            <p class="text-xs md:text-sm font-bold text-slate-600 tracking-widest uppercase">
+                DIKARENAKAN ABSENSI MEMAKAN WAKTU 3 MENIT HINGGA 5 MENIT SEHINGGA MENGGANGGU PROSES MENGAJAR JADI SILAHKAN KEMBALI KE ABSEN MANUAL
+            
