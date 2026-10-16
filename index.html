@@ -661,7 +661,6 @@
             }
         }
 
-
         // ========================================================
         // TAMBAHAN FITUR LIVENESS DETECTION (ANTI FOTO PALSU)
         // ========================================================
@@ -690,9 +689,9 @@
                 return;
             }
 
-            // TANTANGAN UNTUK ASN NON-CADAR
+            // TANTANGAN UNTUK ASN NON-CADAR (Hanya Kiri & Kanan)
             // Pilih tantangan secara acak
-            const daftarTantangan = ["GELENG KE KIRI", "GELENG KE KANAN", "MENGHADAP KE BAWAH"];
+            const daftarTantangan = ["GELENG KE KIRI", "GELENG KE KANAN"];
             jenisTantangan = daftarTantangan[Math.floor(Math.random() * daftarTantangan.length)];
             
             livenessSelesai = false;
@@ -742,23 +741,7 @@
                                 lolos = true;
                             }
                         }
-                    } else if (jenisTantangan === "MENGHADAP KE BAWAH") {
-                         // Deteksi menunduk dengan mengukur jarak pangkal hidung (27) ke ujung hidung (30)
-                         const batasAtasHidung = points[27];
-                         const ujungHidung = points[30];
-                         const jarakHidungVertikal = hitungJarakLiveness(batasAtasHidung, ujungHidung);
-
-                         // Langkah A: Cek apakah ASN menunduk (jarak hidung vertikal memendek)
-                         if (!tahapMenoleh && jarakHidungVertikal < 25) { 
-                             tahapMenoleh = true;
-                             aiStatus.innerHTML = "Bagus! Sekarang kembali <strong>HADAP LURUS KE KAMERA</strong>...";
-                         }
-
-                         // Langkah B: Jika sudah menunduk, tunggu sampai menatap lurus kembali
-                         if (tahapMenoleh && jarakHidungVertikal > 35) {
-                             lolos = true;
-                         }
-                    }
+                    } 
 
                     // Jika gerakan terdeteksi / wajah sudah lurus
                     if (lolos) {
