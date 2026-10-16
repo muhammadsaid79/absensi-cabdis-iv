@@ -59,29 +59,3 @@
             <!-- Sub-judul -->
             <p class="text-xs md:text-sm font-bold text-slate-600 tracking-widest uppercase">
                 DIKARENAKAN ABSENSI MEMAKAN WAKTU 3 MENIT HINGGA 5 MENIT SEHINGGA MENGGANGGU PROSES MENGAJAR JADI SILAHKAN KEMBALI KE ABSEN MANUAL
-    window.addEventListener('DOMContentLoaded', () => {
-            verifikasiPerangkat();
-            muatModelAI();
-
-            // --- LOGIKA SPLASH SCREEN VIDEO ---
-            const splashScreen = document.getElementById('splash-screen');
-            const splashVideo = document.getElementById('splash-video');
-
-            function hilangkanSplash() {
-                if (splashScreen) {
-                    splashScreen.style.opacity = '0'; // Efek transisi menghilang
-                    setTimeout(() => {
-                        splashScreen.style.display = 'none'; // Hapus dari layar
-                    }, 700);
-                }
-            }
-
-            if (splashVideo) {
-                // 1. Hilangkan layar saat video selesai diputar
-                splashVideo.addEventListener('ended', hilangkanSplash);
-                
-                // 2. Fallback Keamanan: Jika video error/gagal muat, layar tetap akan hilang dalam 5 detik
-                splashVideo.addEventListener('error', hilangkanSplash);
-                setTimeout(hilangkanSplash, 5000);
-            }
-        });            
