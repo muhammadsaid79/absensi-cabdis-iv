@@ -118,6 +118,19 @@ st.markdown("""
     }
     div.stButton > button:hover { background-color: #1D4ED8 !important; box-shadow: 0 4px 10px rgba(37, 99, 235, 0.3); }
     [data-testid="stSidebar"] { background-color: #F8FAFC !important; border-right: 1px solid #E2E8F0; }
+    
+    /* DESAIN MODERN UNTUK MENU SIDEBAR (MENGHILANGKAN BULATAN RADIO) */
+    div.row-widget.stRadio > div { gap: 0.8rem; }
+    div.row-widget.stRadio > div > label {
+        background-color: #ffffff; padding: 12px 15px; border-radius: 8px;
+        border: 1px solid #E2E8F0; cursor: pointer; transition: 0.3s;
+    }
+    div.row-widget.stRadio > div > label:hover { background-color: #F1F5F9; border-color: #CBD5E1; }
+    div.row-widget.stRadio > div > label[data-checked="true"] {
+        background-color: #2563EB !important; color: white !important;
+        border-color: #2563EB !important; box-shadow: 0 4px 10px rgba(37, 99, 235, 0.2);
+    }
+    div.row-widget.stRadio > div > label > div:first-child { display: none; }
     </style>
 """, unsafe_allow_html=True)
 
@@ -385,12 +398,33 @@ if st.session_state.role is None:
 st.sidebar.title("Informasi Akun")
 st.sidebar.success(f"Akses: **{st.session_state.role}**")
 if st.session_state.role == "Admin": st.sidebar.caption(f"Unit Kerja: {st.session_state.admin_sekolah}")
-st.sidebar.button("🚪 Keluar (Logout)", on_click=logout, key="btn_logout_sidebar")
 st.sidebar.write("---")
 waktu_sekarang = datetime.datetime.now(pytz.timezone('Asia/Makassar'))
 st.sidebar.markdown("**Waktu Server (WITA):**")
 st.sidebar.info(f"🕒 {waktu_sekarang.strftime('%H:%M:%S')} WITA\n\n📅 {waktu_sekarang.strftime('%d-%m-%Y')}")
 st.sidebar.write("---")
+
+# FITUR BARU: MENU NAVIGASI KIRI KHUSUS SUPERADMIN
+menu_superadmin = None
+if st.session_state.role == "Superadmin":
+    st.sidebar.markdown("### 🎛️ Menu Navigasi")
+    st.sidebar.markdown("<br>", unsafe_allow_html=True) # Tambah ruang kosong agar lega
+    menu_superadmin = st.sidebar.radio(
+        "Pilih Halaman:",
+        [
+            "📈 Rekap Absensi", 
+            "🟥 Laporan Indisipliner",
+            "🏛️ Data Sekolah", 
+            "💻 Kunci PC", 
+            "👥 Data Pegawai", 
+            "🔑 Akun Admin", 
+            "📝 Izin & Manual", 
+            "🚨 Database", 
+            "⚙️ Jam & GPS"
+        ],
+        label_visibility="collapsed"
+    )
+    st.sidebar.write("---")
 
 # ==========================================
 # HAK AKSES 1: ADMIN SEKOLAH
@@ -578,7 +612,7 @@ if st.session_state.role == "Admin":
 # ==========================================
 elif st.session_state.role == "Superadmin":
     col_judul, col_tombol = st.columns([3, 1])
-    col_judul.title("🛠️ Dashboard Superadmin")
+    col_judul.title(f"🛠️ {menu_superadmin}") # Judul dinamis mengikuti menu kiri
     col_tombol.button("🚪 Logout", on_click=logout, use_container_width=True, key="btn_logout_superadmin")
 
     if st.session_state.get('menu_unlocked', False):
@@ -598,14 +632,12 @@ elif st.session_state.role == "Superadmin":
             else:
                 st.error("❌ Sandi menu salah!")
 
-    tab_sekolah, tab_pc, tab_pegawai, tab_admin, tab_izin, tab_database, tab_jam, tab_rekap, tab_indisipliner = st.tabs([
-        "🏛️ Sekolah", "💻 PC", "👥 Pegawai", "🔑 Admin", "📝 Izin", "🚨 Database", "⚙️ Jam", "📈 REKAP ABSENSI", "🟥 LAPORAN INDISIPLINER PEGAWAI"
-    ])
+    st.write("") # Memberi jarak putih ekstra agar UI bernafas (elegan)
 
     # ------------------------------------------
-    # 1. TAB REKAP ABSENSI (BEBAS AKSES)
+    # 1. MENU REKAP ABSENSI (BEBAS AKSES)
     # ------------------------------------------
-    with tab_rekap:
+    if menu_superadmin == "📈 Rekap Absensi":
         st.markdown("### 📈 Rekap Absensi Keseluruhan Pegawai")
         st.caption("Tarik rekap data absensi semua pegawai berdasarkan sekolah dan rentang waktu (Harian/Mingguan/Bulanan).")
 
@@ -650,9 +682,9 @@ elif st.session_state.role == "Superadmin":
                     st.error(f"Terjadi kesalahan: {e}")
 
     # ------------------------------------------
-    # 2. TAB LAPORAN INDISIPLINER (BEBAS AKSES)
+    # 2. MENU LAPORAN INDISIPLINER (BEBAS AKSES)
     # ------------------------------------------
-    with tab_indisipliner:
+    elif menu_superadmin == "🟥 Laporan Indisipliner":
         st.markdown("### 🟥 Laporan Indisipliner Pegawai (Tanpa Keterangan)")
         st.caption("Khusus menyaring pegawai yang memiliki catatan Tanpa Keterangan (Alpha) 1 hari atau lebih.")
 
@@ -701,9 +733,9 @@ elif st.session_state.role == "Superadmin":
                     st.error(f"Terjadi kesalahan: {e}")
 
     # ------------------------------------------
-    # 3. TAB SEKOLAH (TERKUNCI)
+    # 3. MENU DATA SEKOLAH (TERKUNCI)
     # ------------------------------------------
-    with tab_sekolah:
+    elif menu_superadmin == "🏛️ Data Sekolah":
         if not st.session_state['menu_unlocked']:
             tampilkan_form_kunci("Sekolah")
         else:
@@ -743,43 +775,36 @@ elif st.session_state.role == "Superadmin":
                 except Exception as e:
                     st.error(f"❌ Gagal menyimpan ke database: {e}")
 
-   # ------------------------------------------
-    # 4. TAB PC (TERKUNCI)
     # ------------------------------------------
-    with tab_pc:
+    # 4. MENU KUNCI PC (TERKUNCI)
+    # ------------------------------------------
+    elif menu_superadmin == "💻 Kunci PC":
         if not st.session_state['menu_unlocked']:
             tampilkan_form_kunci("PC")
         else:
-            # Injeksi CSS untuk mengubah warna tombol ke-3 (Generate 1 Kunci) menjadi Hijau
             st.markdown("""
                 <style>
                 div[data-testid="column"]:nth-of-type(3) button {
-                    background-color: #10B981 !important; 
-                    box-shadow: 0 4px 10px rgba(16, 185, 129, 0.3) !important;
+                    background-color: #10B981 !important; box-shadow: 0 4px 10px rgba(16, 185, 129, 0.3) !important;
                 }
-                div[data-testid="column"]:nth-of-type(3) button:hover {
-                    background-color: #059669 !important;
-                }
+                div[data-testid="column"]:nth-of-type(3) button:hover { background-color: #059669 !important; }
                 </style>
             """, unsafe_allow_html=True)
 
             st.markdown("### 🔑 Kelola & Generate Kunci Perangkat PC")
             st.caption("Ketik nama sekolah untuk membuat kunci PC baru atau mencari kunci yang sudah ada.")
             
-            # Ambil data sekolah aktif untuk validasi
             df_sekolah_aktif = get_data_sekolah()
             daftar_sekolah = df_sekolah_aktif['school_name'].tolist() if not df_sekolah_aktif.empty else []
 
             with st.form("form_pc_superadmin"):
                 sekolah_input_pc = st.text_input("Masukkan Nama Sekolah:", placeholder="Contoh: SMKN 6 WAJO", key="input_sekolah_pc_super")
                 
-                # Ubah menjadi 3 kolom untuk menampung tombol baru
                 col_b1, col_b2, col_b3 = st.columns(3)
                 btn_cari_pc = col_b1.form_submit_button("🔍 Cari PC Sekolah", use_container_width=True)
                 btn_generate_pc = col_b2.form_submit_button("🔑 Generate 3 Kunci PC", type="primary", use_container_width=True)
                 btn_generate_1_pc = col_b3.form_submit_button("➕ GENERATE 1 KUNCI PC", use_container_width=True)
             
-            # LOGIKA: GENERATE 1 KUNCI PC BARU
             if btn_generate_1_pc:
                 nama_sekolah_clean = sekolah_input_pc.strip()
                 if not nama_sekolah_clean:
@@ -791,11 +816,8 @@ elif st.session_state.role == "Superadmin":
                         prefix = "".join(e for e in nama_sekolah_clean if e.isalnum()).upper()[:8]
                         kunci_baru = f"{prefix}-{uuid.uuid4().hex[:5].upper()}"
 
-                        # Gunakan .insert() agar hanya menambah 1 kunci tanpa mengganggu yang ada
                         supabase.table('kunci_perangkat').insert({
-                            "kunci": kunci_baru, 
-                            "sekolah": nama_sekolah_clean, 
-                            "status": "BELUM_TERPAKAI"
+                            "kunci": kunci_baru, "sekolah": nama_sekolah_clean, "status": "BELUM_TERPAKAI"
                         }).execute()
                         
                         st.success(f"✅ Berhasil menambah 1 Kunci PC BARU untuk **{nama_sekolah_clean}**!")
@@ -805,7 +827,6 @@ elif st.session_state.role == "Superadmin":
                     except Exception as e:
                         st.error(f"❌ Gagal membuat kunci: {e}")
 
-            # LOGIKA: GENERATE 3 KUNCI PC (LAMA)
             if btn_generate_pc:
                 nama_sekolah_clean = sekolah_input_pc.strip()
                 if not nama_sekolah_clean:
@@ -839,7 +860,6 @@ elif st.session_state.role == "Superadmin":
                     except Exception as e:
                         st.error(f"❌ Gagal melakukan pengecekan atau pembuatan kunci: {e}")
 
-            # LOGIKA: CARI PC
             if btn_cari_pc:
                 nama_sekolah_clean = sekolah_input_pc.strip()
                 if not nama_sekolah_clean:
@@ -880,9 +900,9 @@ elif st.session_state.role == "Superadmin":
                     st.error(f"Gagal mengambil data dari Supabase: {e}")
 
     # ------------------------------------------
-    # 5. TAB PEGAWAI (TERKUNCI)
+    # 5. MENU DATA PEGAWAI (TERKUNCI)
     # ------------------------------------------
-    with tab_pegawai:
+    elif menu_superadmin == "👥 Data Pegawai":
         if not st.session_state['menu_unlocked']:
             tampilkan_form_kunci("Pegawai")
         else:
@@ -1010,19 +1030,16 @@ elif st.session_state.role == "Superadmin":
                         col_status_f, col_btn_f = st.columns([2, 1])
                         col_status_f.success("📷 Foto acuan sudah terunggah dalam sistem.")
                         
-                        # Tombol LIHAT FOTO dan GANTI FOTO disusun berdampingan/bertumpuk
                         with col_btn_f:
                             if st.button("🖼️ LIHAT FOTO", key=f"btn_liat_foto_{target_nip}", use_container_width=True):
                                 st.session_state.show_photo_nip = target_nip
                             
-                            # TOMBAL TAMBAHAN: GANTI FOTO DIRECT OLEH SUPERADMIN
                             if st.button("🔄 GANTI FOTO", key=f"btn_toggle_ganti_{target_nip}", use_container_width=True):
                                 st.session_state[f'show_ganti_{target_nip}'] = not st.session_state.get(f'show_ganti_{target_nip}', False)
                     else:
                         st.info("📷 Pegawai ini belum memiliki foto acuan.")
                         st.session_state[f'show_ganti_{target_nip}'] = True
 
-                    # 1. Menampilkan Foto jika tombol 'LIHAT FOTO' ditekan
                     if st.session_state.get('show_photo_nip') == target_nip:
                         try:
                             res_photo = supabase.table('pegawai').select('photo_base64').eq('nip', target_nip).execute()
@@ -1034,7 +1051,6 @@ elif st.session_state.role == "Superadmin":
                         except Exception as e_foto:
                             st.error(f"Gagal menarik data foto: {e_foto}")
 
-                    # 2. Form Upload Foto Langsung oleh Superadmin (jika tombol 'GANTI FOTO' ditekan)
                     if st.session_state.get(f'show_ganti_{target_nip}'):
                         with st.expander("📸 Upload / Timpa Foto Acuan Langsung (Akses Superadmin)", expanded=True):
                             foto_file_super = st.file_uploader("Pilih Foto Acuan Baru (Maksimal 3MB, JPG/PNG):", type=['jpg', 'jpeg', 'png'], key=f"up_foto_super_{target_nip}")
@@ -1053,7 +1069,6 @@ elif st.session_state.role == "Superadmin":
                                             time.sleep(1)
                                             st.rerun()
 
-                    # Form Update Nama, Sekolah, dan Buka Kunci Foto Manual tetap di bawahnya...
                     with st.form("form_update_pegawai"):
                         edit_nama = st.text_input("Nama Pegawai:", value=emp_edit.get('name', ''))
                         
@@ -1102,9 +1117,9 @@ elif st.session_state.role == "Superadmin":
                                 st.error(f"Gagal memperbarui data: {e}")
 
     # ------------------------------------------
-    # 6. TAB ADMIN (TERKUNCI)
+    # 6. MENU AKUN ADMIN (TERKUNCI)
     # ------------------------------------------
-    with tab_admin:
+    elif menu_superadmin == "🔑 Akun Admin":
         if not st.session_state['menu_unlocked']:
             tampilkan_form_kunci("Admin")
         else:
@@ -1136,13 +1151,12 @@ elif st.session_state.role == "Superadmin":
                         st.rerun()
 
     # ------------------------------------------
-    # 7. TAB IZIN & ABSEN MANUAL
+    # 7. MENU IZIN & MANUAL
     # ------------------------------------------
-    with tab_izin:
+    elif menu_superadmin == "📝 Izin & Manual":
         st.markdown("### 📝 Input Izin / Cuti / Sakit / Dinas Luar")
         st.caption("Cari NIP Pegawai, lengkapi formulir izin, dan upload surat PDF.")
 
-        # Fitur Pencarian Pegawai (IZIN)
         with st.form("form_cari_nip_izin"):
             nip_input_izin = st.text_input("Masukkan NIP Pegawai:", placeholder="Ketik NIP lalu tekan enter atau cari")
             btn_cari_izin = st.form_submit_button("🔍 Cari Pegawai")
@@ -1157,7 +1171,6 @@ elif st.session_state.role == "Superadmin":
         if st.session_state.get('nip_izin_target'):
             nip_target = st.session_state['nip_izin_target']
             
-            # Ambil data pegawai dari database
             try:
                 res_pegawai_izin = supabase.table('pegawai').select('nip, name, school_name').eq('nip', nip_target).execute()
                 df_pegawai_izin = pd.DataFrame(res_pegawai_izin.data) if res_pegawai_izin.data else pd.DataFrame()
@@ -1170,7 +1183,6 @@ elif st.session_state.role == "Superadmin":
                 peg_izin = df_pegawai_izin.iloc[0]
                 st.success(f"👤 Data Ditemukan: **{peg_izin['name']}** ({peg_izin['school_name']})")
                 
-                # Formulir Pengajuan Izin
                 with st.form("form_pengajuan_izin"):
                     jenis_izin = st.selectbox("Pilih Jenis Izin:", ["Cuti", "Sakit", "Dinas Luar", "Izin Lainnya"])
                     
@@ -1192,19 +1204,16 @@ elif st.session_state.role == "Superadmin":
                             st.error("❌ Anda harus mengunggah Surat berformat PDF.")
                         else:
                             try:
-                                # 1. Upload File Surat PDF
                                 surat_bytes = surat_pdf.getvalue()
                                 timestamp_surat = int(time.time())
                                 file_path = f"surat_izin/{nip_target}_{timestamp_surat}.pdf"
                                 url_surat = upload_ke_supabase(surat_bytes, file_path, "application/pdf")
                                 
-                                # 2. Buat Log Absensi Harian (Iterasi sesuai rentang tanggal)
                                 delta_days = (tgl_selesai_izin - tgl_mulai_izin).days + 1
                                 records_izin = []
                                 
                                 for i in range(delta_days):
                                     current_date = tgl_mulai_izin + datetime.timedelta(days=i)
-                                    # Abaikan akhir pekan (Sabtu & Minggu) jika tidak ada kewajiban absen
                                     if current_date.weekday() < 5:
                                         records_izin.append({
                                             'nip': nip_target,
@@ -1213,13 +1222,13 @@ elif st.session_state.role == "Superadmin":
                                             'tanggal': current_date.strftime('%Y-%m-%d'),
                                             'jam': '-',
                                             'status': jenis_izin.upper(),
-                                            'foto_bukti': url_surat # Menyimpan link dokumen sebagai referensi
+                                            'foto_bukti': url_surat 
                                         })
                                         
                                 if records_izin:
                                     supabase.table('absensi').insert(records_izin).execute()
                                     st.success(f"✅ Pengajuan {jenis_izin} berhasil dikirim dan dicatat untuk {len(records_izin)} hari kerja!")
-                                    st.session_state['nip_izin_target'] = None # Reset sesi
+                                    st.session_state['nip_izin_target'] = None 
                                     time.sleep(1.5)
                                     st.rerun()
                                 else:
@@ -1229,9 +1238,6 @@ elif st.session_state.role == "Superadmin":
 
         st.markdown("---")
 
-        # ==========================================
-        # FITUR BARU: INPUT ABSEN MANUAL BY SUPERADMIN
-        # ==========================================
         st.markdown("### ✍️ Input Absen Manual (Masuk/Pulang)")
         st.caption("Input absen manual ke database. ASN yang diinput di sini tidak perlu absen lagi di sekolah.")
 
@@ -1246,7 +1252,6 @@ elif st.session_state.role == "Superadmin":
                 st.session_state['nip_manual_target'] = None
                 st.warning("Silakan masukkan NIP terlebih dahulu.")
 
-        # Jika NIP manual sudah dicari dan disave di session
         if st.session_state.get('nip_manual_target'):
             nip_target_manual = st.session_state['nip_manual_target']
             
@@ -1262,7 +1267,6 @@ elif st.session_state.role == "Superadmin":
                 peg_man = df_peg_man.iloc[0]
                 st.success(f"👤 Data Ditemukan: **{peg_man['name']}** ({peg_man['school_name']})")
                 
-                # Form Eksekusi Absen Manual
                 with st.form("form_eksekusi_absen_manual"):
                     col_m1, col_m2 = st.columns(2)
                     with col_m1:
@@ -1284,7 +1288,6 @@ elif st.session_state.role == "Superadmin":
                         
                     if btn_ok_manual:
                         try:
-                            # Memasukkan absen manual langsung ke Supabase
                             supabase.table('absensi').insert([{
                                 'nip': nip_target_manual,
                                 'nama': peg_man['name'],
@@ -1292,7 +1295,7 @@ elif st.session_state.role == "Superadmin":
                                 'tanggal': tgl_manual.strftime('%Y-%m-%d'),
                                 'jam': jam_manual.strftime('%H:%M'),
                                 'status': status_manual,
-                                'jarak_m': 'Manual by Admin', # Penanda bahwa ini diabsenkan admin
+                                'jarak_m': 'Manual by Admin', 
                                 'foto_bukti': None
                             }]).execute()
                             
@@ -1304,9 +1307,9 @@ elif st.session_state.role == "Superadmin":
                             st.error(f"❌ Gagal menyimpan absen manual: {e}")
 
     # ------------------------------------------
-    # 8. TAB DATABASE
+    # 8. MENU DATABASE
     # ------------------------------------------
-    with tab_database:
+    elif menu_superadmin == "🚨 Database":
         st.markdown("### 🚨 Kelola & Backup Database")
 
         st.markdown("#### 📥 Backup Data Absensi")
@@ -1379,9 +1382,9 @@ elif st.session_state.role == "Superadmin":
                     st.error(f"Gagal menghapus data: {e}")
 
     # ------------------------------------------
-    # 9. TAB JAM & GPS (TERKUNCI)
+    # 9. MENU JAM & GPS (TERKUNCI)
     # ------------------------------------------
-    with tab_jam:
+    elif menu_superadmin == "⚙️ Jam & GPS":
         if not st.session_state['menu_unlocked']:
             tampilkan_form_kunci("Jam & GPS")
         else:
@@ -1390,7 +1393,6 @@ elif st.session_state.role == "Superadmin":
             b_in = df_settings['batas_masuk'].iloc[0] if not df_settings.empty else '07:30'
             b_out = df_settings['batas_pulang'].iloc[0] if not df_settings.empty else '16:00'
             
-            # Tarik setelan status GPS
             if 'gps_aktif' in df_settings.columns and not pd.isna(df_settings['gps_aktif'].iloc[0]):
                 gps_state = bool(df_settings['gps_aktif'].iloc[0])
             else:
