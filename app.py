@@ -69,7 +69,7 @@ def upload_ke_supabase(file_bytes, file_path, content_type):
 def tampilkan_peringatan_csv():
     st.write("Gagal memproses file: Terdapat **sel atau baris kosong** di dalam file CSV Anda.")
     st.write("Pastikan semua data terisi penuh dan hapus baris kosong di bagian paling bawah tabel, lalu coba upload ulang.")
-    if st.button("Oke, Saya Mengerti", key="btn_close_dialog_csv", use_container_width=True):
+    if st.button("Oke, Saya Mengerti", key="btn_close_dialog_csv", width="stretch"):
         st.rerun()
 
 # --- 1.5. FUNGSI KRIPTOGRAFI KEAMANAN ---
@@ -362,7 +362,7 @@ if st.session_state.role is None:
         with st.expander("🔑 Login Admin Sekolah", expanded=True):
             input_user_admin = st.text_input("Username Admin:", key="user_admin_main")
             pwd = st.text_input("Password Admin:", type="password", key="pwd_admin_main")
-            if st.button("Masuk Admin", use_container_width=True, key="btn_admin_main"):
+            if st.button("Masuk Admin", width="stretch", key="btn_admin_main"):
                 df_adm = get_data_admin()
                 is_valid = False
                 assigned_school = "Semua Sekolah"
@@ -383,7 +383,7 @@ if st.session_state.role is None:
     with col_super:
         with st.expander("🛠️ Login Superadmin", expanded=True):
             pwd_super = st.text_input("Password Superadmin:", type="password", key="pwd_super_main")
-            if st.button("Masuk Superadmin", use_container_width=True, key="btn_super_main"):
+            if st.button("Masuk Superadmin", width="stretch", key="btn_super_main"):
                 if pwd_super == SUPERADMIN_PASSWORD:
                     st.session_state.role = "Superadmin"
                     cookie_manager.set("auth_token", generate_signed_token("Superadmin"), key="set_token_login_super")
@@ -432,7 +432,7 @@ if st.session_state.role == "Superadmin":
 if st.session_state.role == "Admin":
     col_judul, col_tombol = st.columns([3, 1])
     col_judul.title("🔐 Dashboard Admin Sekolah")
-    col_tombol.button("🚪 Logout", on_click=logout, use_container_width=True, key="btn_logout_top_admin")
+    col_tombol.button("🚪 Logout", on_click=logout, width="stretch", key="btn_logout_top_admin")
     admin_akses = st.session_state.get('admin_sekolah', 'Semua Sekolah')
 
     tab_foto, tab_dashboard = st.tabs([
@@ -518,7 +518,7 @@ if st.session_state.role == "Admin":
                             if foto_file.size > 3145728:
                                 st.error("❌ Ukuran foto terlalu besar! Maksimal ukuran file adalah 3MB. Silakan kompres/perkecil foto Anda terlebih dahulu.")
                             else:
-                                if st.button("💾 Simpan Foto Acuan", key=f"btn_save_foto_{nip_peg}", use_container_width=True):
+                                if st.button("💾 Simpan Foto Acuan", key=f"btn_save_foto_{nip_peg}", width="stretch"):
                                     file_bytes = kompres_foto(foto_file.getvalue(), quality=60, max_size=(600, 600))
                                     url_foto = upload_ke_supabase(file_bytes, f"foto_acuan/{nip_peg}.jpg", "image/jpeg")
                                     if url_foto:
@@ -556,7 +556,7 @@ if st.session_state.role == "Admin":
             with col_d2:
                 tgl_check_input = st.date_input("Pilih Tanggal:", datetime.date.today(), key="tgl_check_dashboard")
                 
-            btn_cek_dash = st.button("🔍 Cek Status Absensi", type="primary", use_container_width=True, key="btn_cek_absensi_dash")
+            btn_cek_dash = st.button("🔍 Cek Status Absensi", type="primary", width="stretch", key="btn_cek_absensi_dash")
             
             if btn_cek_dash:
                 if nip_check_input.strip():
@@ -605,7 +605,7 @@ if st.session_state.role == "Admin":
                                 
                                 foto_url = r_a.get('foto_bukti', '')
                                 if foto_url:
-                                    c_foto.image(foto_url, caption="Foto Bukti Absen", use_container_width=True)
+                                    c_foto.image(foto_url, caption="Foto Bukti Absen", width="stretch")
 
 # ==========================================
 # HAK AKSES 2: SUPERADMIN
@@ -613,7 +613,7 @@ if st.session_state.role == "Admin":
 elif st.session_state.role == "Superadmin":
     col_judul, col_tombol = st.columns([3, 1])
     col_judul.title(f"🛠️ {menu_superadmin}") # Judul dinamis mengikuti menu kiri
-    col_tombol.button("🚪 Logout", on_click=logout, use_container_width=True, key="btn_logout_superadmin")
+    col_tombol.button("🚪 Logout", on_click=logout, width="stretch", key="btn_logout_superadmin")
 
     if st.session_state.get('menu_unlocked', False):
         if st.button("🔒 Kunci Kembali Layar Menu Admin", key="btn_lock_menu_again"):
@@ -664,7 +664,7 @@ elif st.session_state.role == "Superadmin":
                         st.info(f"Tidak ada pegawai ditemukan di: **{sekolah_rekap}**")
                     else:
                         st.success(f"✅ Data berhasil ditarik. Total Hari Kerja (Senin-Jumat): **{total_hari_kerja} Hari**")
-                        st.dataframe(df_final, use_container_width=True)
+                        st.dataframe(df_final, width="stretch")
 
                         # Download Excel
                         buffer_rekap = io.BytesIO()
@@ -716,7 +716,7 @@ elif st.session_state.role == "Superadmin":
                             st.success("🎉 **SANGAT BAIK:** Tidak ditemukan pegawai indisipliner pada periode ini.")
                         else:
                             st.error(f"⚠️ Ditemukan **{len(df_indisipliner)} Pegawai** dengan catatan Tanpa Keterangan (Alpha) ≥ 1 hari!")
-                            st.dataframe(df_indisipliner, use_container_width=True)
+                            st.dataframe(df_indisipliner, width="stretch")
                             
                             buffer_indi = io.BytesIO()
                             with pd.ExcelWriter(buffer_indi, engine='openpyxl') as writer:
@@ -741,7 +741,7 @@ elif st.session_state.role == "Superadmin":
         else:
             st.markdown("### Sekolah Aktif")
             df_sekolah_curr = get_data_sekolah()
-            edited_schools = st.data_editor(df_sekolah_curr, num_rows="dynamic", use_container_width=True)
+            edited_schools = st.data_editor(df_sekolah_curr, num_rows="dynamic", width="stretch")
             if st.button("💾 Simpan Perubahan Sekolah", type="primary"):
                 try:
                     df_clean = edited_schools.copy()
@@ -801,9 +801,9 @@ elif st.session_state.role == "Superadmin":
                 sekolah_input_pc = st.text_input("Masukkan Nama Sekolah:", placeholder="Contoh: SMKN 6 WAJO", key="input_sekolah_pc_super")
                 
                 col_b1, col_b2, col_b3 = st.columns(3)
-                btn_cari_pc = col_b1.form_submit_button("🔍 Cari PC Sekolah", use_container_width=True)
-                btn_generate_pc = col_b2.form_submit_button("🔑 Generate 3 Kunci PC", type="primary", use_container_width=True)
-                btn_generate_1_pc = col_b3.form_submit_button("➕ GENERATE 1 KUNCI PC", use_container_width=True)
+                btn_cari_pc = col_b1.form_submit_button("🔍 Cari PC Sekolah", width="stretch")
+                btn_generate_pc = col_b2.form_submit_button("🔑 Generate 3 Kunci PC", type="primary", width="stretch")
+                btn_generate_1_pc = col_b3.form_submit_button("➕ GENERATE 1 KUNCI PC", width="stretch")
             
             if btn_generate_1_pc:
                 nama_sekolah_clean = sekolah_input_pc.strip()
@@ -1031,10 +1031,10 @@ elif st.session_state.role == "Superadmin":
                         col_status_f.success("📷 Foto acuan sudah terunggah dalam sistem.")
                         
                         with col_btn_f:
-                            if st.button("🖼️ LIHAT FOTO", key=f"btn_liat_foto_{target_nip}", use_container_width=True):
+                            if st.button("🖼️ LIHAT FOTO", key=f"btn_liat_foto_{target_nip}", width="stretch"):
                                 st.session_state.show_photo_nip = target_nip
                             
-                            if st.button("🔄 GANTI FOTO", key=f"btn_toggle_ganti_{target_nip}", use_container_width=True):
+                            if st.button("🔄 GANTI FOTO", key=f"btn_toggle_ganti_{target_nip}", width="stretch"):
                                 st.session_state[f'show_ganti_{target_nip}'] = not st.session_state.get(f'show_ganti_{target_nip}', False)
                     else:
                         st.info("📷 Pegawai ini belum memiliki foto acuan.")
@@ -1059,7 +1059,7 @@ elif st.session_state.role == "Superadmin":
                                 if foto_file_super.size > 3145728:
                                     st.error("❌ Ukuran foto terlalu besar! Maksimal ukuran file adalah 3MB.")
                                 else:
-                                    if st.button("💾 Simpan & Timpa Foto Acuan", key=f"btn_save_super_foto_{target_nip}", type="primary", use_container_width=True):
+                                    if st.button("💾 Simpan & Timpa Foto Acuan", key=f"btn_save_super_foto_{target_nip}", type="primary", width="stretch"):
                                         file_bytes = kompres_foto(foto_file_super.getvalue(), quality=60, max_size=(600, 600))
                                         url_foto = upload_ke_supabase(file_bytes, f"foto_acuan/{target_nip}.jpg", "image/jpeg")
                                         if url_foto:
