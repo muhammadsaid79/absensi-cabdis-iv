@@ -1136,13 +1136,13 @@ elif st.session_state.role == "Superadmin":
                         st.rerun()
 
     # ------------------------------------------
-    # 7. TAB IZIN
+    # 7. TAB IZIN & ABSEN MANUAL
     # ------------------------------------------
     with tab_izin:
         st.markdown("### 📝 Input Izin / Cuti / Sakit / Dinas Luar")
         st.caption("Cari NIP Pegawai, lengkapi formulir izin, dan upload surat PDF.")
 
-        # Fitur Pencarian Pegawai
+        # Fitur Pencarian Pegawai (IZIN)
         with st.form("form_cari_nip_izin"):
             nip_input_izin = st.text_input("Masukkan NIP Pegawai:", placeholder="Ketik NIP lalu tekan enter atau cari")
             btn_cari_izin = st.form_submit_button("🔍 Cari Pegawai")
@@ -1226,6 +1226,82 @@ elif st.session_state.role == "Superadmin":
                                     st.warning("⚠️ Rentang tanggal yang dipilih hanya mencakup akhir pekan.")
                             except Exception as e:
                                 st.error(f"Gagal memproses pengajuan izin: {e}")
+
+        st.markdown("---")
+
+        # ==========================================
+        # FITUR BARU: INPUT ABSEN MANUAL BY SUPERADMIN
+        # ==========================================
+        st.markdown("### ✍️ Input Absen Manual (Masuk/Pulang)")
+        st.caption("Input absen manual ke database. ASN yang diinput di sini tidak perlu absen lagi di sekolah.")
+
+        with st.form("form_cari_nip_manual"):
+            nip_input_manual = st.text_input("Masukkan NIP Pegawai (Untuk Absen Manual):", placeholder="Ketik NIP lalu cari", key="nip_manual_search")
+            btn_cari_manual = st.form_submit_button("🔍 Cari Data Pegawai")
+
+        if btn_cari_manual:
+            if nip_input_manual.strip():
+                st.session_state['nip_manual_target'] = nip_input_manual.strip()
+            else:
+                st.session_state['nip_manual_target'] = None
+                st.warning("Silakan masukkan NIP terlebih dahulu.")
+
+        # Jika NIP manual sudah dicari dan disave di session
+        if st.session_state.get('nip_manual_target'):
+            nip_target_manual = st.session_state['nip_manual_target']
+            
+            try:
+                res_peg_man = supabase.table('pegawai').select('nip, name, school_name').eq('nip', nip_target_manual).execute()
+                df_peg_man = pd.DataFrame(res_peg_man.data) if res_peg_man.data else pd.DataFrame()
+            except Exception as e:
+                df_peg_man = pd.DataFrame()
+
+            if df_peg_man.empty:
+                st.error("⚠️ Data ASN tidak ditemukan di dalam sistem.")
+            else:
+                peg_man = df_peg_man.iloc[0]
+                st.success(f"👤 Data Ditemukan: **{peg_man['name']}** ({peg_man['school_name']})")
+                
+                # Form Eksekusi Absen Manual
+                with st.form("form_eksekusi_absen_manual"):
+                    col_m1, col_m2 = st.columns(2)
+                    with col_m1:
+                        tgl_manual = st.date_input("Tanggal Absen:")
+                    with col_m2:
+                        jam_manual = st.time_input("Jam Absen:")
+                        
+                    status_manual = st.selectbox("Pilih Status Absensi:", ["DATANG", "PULANG"])
+                    
+                    col_b1, col_b2 = st.columns(2)
+                    with col_b1:
+                        btn_batal_manual = st.form_submit_button("❌ Batal")
+                    with col_b2:
+                        btn_ok_manual = st.form_submit_button("✅ OK (Simpan Absen)", type="primary")
+                        
+                    if btn_batal_manual:
+                        st.session_state['nip_manual_target'] = None
+                        st.rerun()
+                        
+                    if btn_ok_manual:
+                        try:
+                            # Memasukkan absen manual langsung ke Supabase
+                            supabase.table('absensi').insert([{
+                                'nip': nip_target_manual,
+                                'nama': peg_man['name'],
+                                'sekolah': peg_man['school_name'],
+                                'tanggal': tgl_manual.strftime('%Y-%m-%d'),
+                                'jam': jam_manual.strftime('%H:%M'),
+                                'status': status_manual,
+                                'jarak_m': 'Manual by Admin', # Penanda bahwa ini diabsenkan admin
+                                'foto_bukti': None
+                            }]).execute()
+                            
+                            st.success(f"✅ Absensi {status_manual} manual untuk {peg_man['name']} berhasil disimpan!")
+                            st.session_state['nip_manual_target'] = None
+                            time.sleep(1.5)
+                            st.rerun()
+                        except Exception as e:
+                            st.error(f"❌ Gagal menyimpan absen manual: {e}")
 
     # ------------------------------------------
     # 8. TAB DATABASE
