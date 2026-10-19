@@ -96,7 +96,7 @@ def verify_and_get_role(token: str):
     return None
 
 # --- 2. KONFIGURASI HALAMAN & COOKIE ---
-st.set_page_config(page_title="Sistem Absensi Sekolah Cabdis Wil IV", page_icon="🏫", layout="centered")
+st.set_page_config(page_title="Sistem Absensi Sekolah Cabdis Wil IV", page_icon="🏫", layout="centered", initial_sidebar_state="expanded")
 cookie_manager = stx.CookieManager(key="cookie_manager_utama")
 
 # --- 3. CUSTOM CSS ---
@@ -104,9 +104,15 @@ st.markdown("""
     <style>
     @import url('https://fonts.googleapis.com/css2?family=Poppins:wght@300;400;600;700&display=swap');
     html, body, [class*="css"] { font-family: 'Poppins', sans-serif !important; }
+    
+    /* MENYEMBUNYIKAN HEADER & TOMBOL TOGGLE SIDEBAR */
     header {visibility: hidden !important; height: 0px !important;} 
     [data-testid="stToolbar"], [data-testid="stDecoration"], footer, #MainMenu {visibility: hidden !important;}
     [data-testid="stHeaderActionElements"], .header-anchor { display: none !important; }
+    
+    /* MENGHILANGKAN TOMBOL PANAH >>> UNTUK COLLAPSE SIDEBAR */
+    [data-testid="collapsedControl"] { display: none !important; }
+    
     .block-container { padding-top: 2rem !important; }
     .stForm, div[data-testid="stExpander"] {
         background-color: #FFFFFF; padding: 24px; border-radius: 12px;
@@ -119,17 +125,31 @@ st.markdown("""
     div.stButton > button:hover { background-color: #1D4ED8 !important; box-shadow: 0 4px 10px rgba(37, 99, 235, 0.3); }
     [data-testid="stSidebar"] { background-color: #F8FAFC !important; border-right: 1px solid #E2E8F0; }
     
-    /* DESAIN MODERN UNTUK MENU SIDEBAR (MENGHILANGKAN BULATAN RADIO) */
-    div.row-widget.stRadio > div { gap: 0.8rem; }
-    div.row-widget.stRadio > div > label {
-        background-color: #ffffff; padding: 12px 15px; border-radius: 8px;
-        border: 1px solid #E2E8F0; cursor: pointer; transition: 0.3s;
+    /* DESAIN MENU SIDEBAR (SPASI DIRAPATKAN & HURUF DIPERBESAR) */
+    div.row-widget.stRadio > div { 
+        gap: 0.3rem; /* Mengurangi jarak antar menu yang sebelumnya 0.8rem */ 
     }
+    div.row-widget.stRadio > div > label {
+        background-color: #ffffff; 
+        padding: 8px 12px; /* Mengurangi padding agar menu lebih padat */
+        border-radius: 8px;
+        border: 1px solid #E2E8F0; 
+        cursor: pointer; 
+        transition: 0.3s;
+    }
+    
+    /* MEMPERBESAR UKURAN HURUF MENU MENYESUAIKAN INFO AKUN */
+    div.row-widget.stRadio > div > label > div.st-markdown-container > p {
+        font-size: 1.1rem !important; 
+        font-weight: 600 !important;
+    }
+    
     div.row-widget.stRadio > div > label:hover { background-color: #F1F5F9; border-color: #CBD5E1; }
     div.row-widget.stRadio > div > label[data-checked="true"] {
         background-color: #2563EB !important; color: white !important;
         border-color: #2563EB !important; box-shadow: 0 4px 10px rgba(37, 99, 235, 0.2);
     }
+    /* MENGHILANGKAN BULATAN RADIO BAWAAN */
     div.row-widget.stRadio > div > label > div:first-child { display: none; }
     </style>
 """, unsafe_allow_html=True)
