@@ -153,7 +153,7 @@ st.markdown("""
     div.row-widget.stRadio > div > label {
         background-color: #ffffff; 
         padding: 10px 14px; 
-        border-radius: 8px;
+        border-radius: 3px;
         border: 1px solid #E2E8F0; 
         cursor: pointer; 
         transition: 0.3s;
@@ -161,8 +161,8 @@ st.markdown("""
     
     /* UKURAN HURUF MENU SIDEBAR */
     div.row-widget.stRadio > div > label > div.st-markdown-container > p {
-        font-size: 0.95rem !important; 
-        font-weight: 600 !important;
+        font-size: 1rem !important; 
+        font-weight: 700 !important;
     }
     
     div.row-widget.stRadio > div > label:hover { background-color: #F1F5F9; border-color: #CBD5E1; }
@@ -449,7 +449,6 @@ st.sidebar.write("---")
 menu_superadmin = None
 if st.session_state.role == "Superadmin":
     st.sidebar.markdown("### 🎛️ Menu Navigasi")
-    st.sidebar.markdown("<br>", unsafe_allow_html=True) # Tambah ruang kosong agar lega
     menu_superadmin = st.sidebar.radio(
         "Pilih Halaman:",
         [
