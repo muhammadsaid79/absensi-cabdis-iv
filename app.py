@@ -96,7 +96,7 @@ def verify_and_get_role(token: str):
     return None
 
 # --- 2. KONFIGURASI HALAMAN & COOKIE ---
-st.set_page_config(page_title="Sistem Absensi Sekolah Cabdis Wil IV", page_icon="🏫", layout="centered", initial_sidebar_state="expanded")
+st.set_page_config(page_title="Sistem Absensi Sekolah Cabdis Wil IV", page_icon="🏫", layout="wide", initial_sidebar_state="expanded")
 cookie_manager = stx.CookieManager(key="cookie_manager_utama")
 
 # --- 3. CUSTOM CSS ---
@@ -110,17 +110,24 @@ st.markdown("""
     [data-testid="stToolbar"], [data-testid="stDecoration"], footer, #MainMenu { visibility: hidden !important; }
     [data-testid="stHeaderActionElements"], .header-anchor { display: none !important; }
     
-    /* PAKSA SIDEBAR SELALU TERBUKA (PATEN & PERMANEN) */
+    /* SETTING SIDEBAR PATEN, LEBAR PROPORSIONAL & LEGA */
     [data-testid="stSidebar"] {
+        width: 280px !important;
+        min-width: 280px !important;
+        max-width: 280px !important;
         background-color: #F8FAFC !important;
-        border-right: 1px solid #E2E8F0;
+        border-right: 1px solid #E2E8F0 !important;
         transform: none !important;
         visibility: visible !important;
         display: block !important;
+    }
+    
+    /* MENYESUAIKAN CONTAINER UTAMA AGAR TIDAK TERTUTUP SIDEBAR */
+    section[data-testid="stSidebar"] + section {
         margin-left: 0px !important;
     }
     
-    /* SEMBUNYIKAN TOMBOL PANAH / PENUTUP SIDEBAR (TIDAK BISA DITUTUP) */
+    /* SEMBUNYIKAN TOMBOL PANAH PENUTUP SIDEBAR */
     [data-testid="stSidebarCollapseButton"],
     [data-testid="collapsedControl"],
     button[aria-label="Close sidebar"],
@@ -128,7 +135,7 @@ st.markdown("""
         display: none !important;
     }
     
-    .block-container { padding-top: 2rem !important; }
+    .block-container { padding-top: 2rem !important; padding-bottom: 2rem !important; }
     .stForm, div[data-testid="stExpander"] {
         background-color: #FFFFFF; padding: 24px; border-radius: 12px;
         box-shadow: 0px 4px 15px rgba(0, 0, 0, 0.05); border: 1px solid #E2E8F0;
@@ -139,22 +146,22 @@ st.markdown("""
     }
     div.stButton > button:hover { background-color: #1D4ED8 !important; box-shadow: 0 4px 10px rgba(37, 99, 235, 0.3); }
     
-    /* DESAIN MENU SIDEBAR (SPASI DIRAPATKAN & HURUF DIPERBESAR) */
+    /* DESAIN MENU SIDEBAR (SPASI PADAT & HURUF PAS DENGAN INFO AKUN) */
     div.row-widget.stRadio > div { 
-        gap: 0.3rem; 
+        gap: 0.4rem !important; 
     }
     div.row-widget.stRadio > div > label {
         background-color: #ffffff; 
-        padding: 8px 12px; 
+        padding: 10px 14px; 
         border-radius: 8px;
         border: 1px solid #E2E8F0; 
         cursor: pointer; 
         transition: 0.3s;
     }
     
-    /* MEMPERBESAR UKURAN HURUF MENU MENYESUAIKAN INFO AKUN */
+    /* UKURAN HURUF MENU SIDEBAR */
     div.row-widget.stRadio > div > label > div.st-markdown-container > p {
-        font-size: 1.1rem !important; 
+        font-size: 0.95rem !important; 
         font-weight: 600 !important;
     }
     
