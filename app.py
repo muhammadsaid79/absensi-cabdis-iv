@@ -110,8 +110,7 @@ st.markdown("""
     [data-testid="stToolbar"], [data-testid="stDecoration"], footer, #MainMenu {visibility: hidden !important;}
     [data-testid="stHeaderActionElements"], .header-anchor { display: none !important; }
     
-    /* MENGHILANGKAN TOMBOL PANAH >>> UNTUK COLLAPSE SIDEBAR */
-    [data-testid="collapsedControl"] { display: none !important; }
+    /* MENGHILANGKAN TOMBOL PANAH >>> UNTUK COLLAPSE SIDEBAR TELAH DIHAPUS AGAR BISA DIBUKA JIKA TERTUTUP */
     
     .block-container { padding-top: 2rem !important; }
     .stForm, div[data-testid="stExpander"] {
