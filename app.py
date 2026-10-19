@@ -105,13 +105,28 @@ st.markdown("""
     @import url('https://fonts.googleapis.com/css2?family=Poppins:wght@300;400;600;700&display=swap');
     html, body, [class*="css"] { font-family: 'Poppins', sans-serif !important; }
     
-    /* MENYEMBUNYIKAN HEADER & TOMBOL TOGGLE SIDEBAR */
-    header {visibility: hidden !important; height: 0px !important;} 
-    [data-testid="stToolbar"], [data-testid="stDecoration"], footer, #MainMenu {visibility: hidden !important;}
+    /* MENYEMBUNYIKAN HEADER & TOOLBAR BAWAAN STREAMLIT */
+    header { visibility: hidden !important; height: 0px !important; } 
+    [data-testid="stToolbar"], [data-testid="stDecoration"], footer, #MainMenu { visibility: hidden !important; }
     [data-testid="stHeaderActionElements"], .header-anchor { display: none !important; }
     
-   /* MENGHILANGKAN TOMBOL PANAH >>> UNTUK COLLAPSE SIDEBAR */
-    /* [data-testid="collapsedControl"] { display: none !important; } */
+    /* PAKSA SIDEBAR SELALU TERBUKA (PATEN & PERMANEN) */
+    [data-testid="stSidebar"] {
+        background-color: #F8FAFC !important;
+        border-right: 1px solid #E2E8F0;
+        transform: none !important;
+        visibility: visible !important;
+        display: block !important;
+        margin-left: 0px !important;
+    }
+    
+    /* SEMBUNYIKAN TOMBOL PANAH / PENUTUP SIDEBAR (TIDAK BISA DITUTUP) */
+    [data-testid="stSidebarCollapseButton"],
+    [data-testid="collapsedControl"],
+    button[aria-label="Close sidebar"],
+    button[aria-label="Collapse sidebar"] {
+        display: none !important;
+    }
     
     .block-container { padding-top: 2rem !important; }
     .stForm, div[data-testid="stExpander"] {
@@ -123,15 +138,14 @@ st.markdown("""
         border-radius: 8px !important; border: none !important; transition: 0.3s;
     }
     div.stButton > button:hover { background-color: #1D4ED8 !important; box-shadow: 0 4px 10px rgba(37, 99, 235, 0.3); }
-    [data-testid="stSidebar"] { background-color: #F8FAFC !important; border-right: 1px solid #E2E8F0; }
     
     /* DESAIN MENU SIDEBAR (SPASI DIRAPATKAN & HURUF DIPERBESAR) */
     div.row-widget.stRadio > div { 
-        gap: 0.3rem; /* Mengurangi jarak antar menu yang sebelumnya 0.8rem */ 
+        gap: 0.3rem; 
     }
     div.row-widget.stRadio > div > label {
         background-color: #ffffff; 
-        padding: 8px 12px; /* Mengurangi padding agar menu lebih padat */
+        padding: 8px 12px; 
         border-radius: 8px;
         border: 1px solid #E2E8F0; 
         cursor: pointer; 
