@@ -176,7 +176,7 @@ st.markdown("""
 """, unsafe_allow_html=True)
 
 # --- 4. FUNGSI INTERAKSI DATABASE (OPTIMASI CACHING UNTUK MENGHEMAT EGRESS) ---
-@st.cache_data(ttl=600)
+@st.cache_data(ttl=86400)
 def get_data_sekolah():
     try:
         res = supabase.table('sekolah').select('school_name, lat, lng, radius_m').execute()
@@ -184,7 +184,7 @@ def get_data_sekolah():
     except: pass
     return pd.DataFrame(columns=['school_name', 'lat', 'lng', 'radius_m'])
 
-@st.cache_data(ttl=600)
+@st.cache_data(ttl=86400)
 def get_data_admin():
     try:
         res = supabase.table('admins').select('id, username, password, sekolah').execute()
@@ -192,7 +192,7 @@ def get_data_admin():
     except: pass
     return pd.DataFrame(columns=['id', 'username', 'password', 'sekolah'])
 
-@st.cache_data(ttl=600)
+@st.cache_data(ttl=86400)
 def get_data_pengaturan():
     try:
         # Tambahkan query gps_aktif
