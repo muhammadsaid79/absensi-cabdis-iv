@@ -13,7 +13,6 @@ import pytz
 
 import pandas as pd
 import streamlit as st
-import streamlit.components.v1 as components
 import extra_streamlit_components as stx
 from PIL import Image
 from dotenv import load_dotenv
@@ -267,7 +266,6 @@ def proses_rekap_absensi(nama_sekolah, tgl_mulai, tgl_selesai):
     except Exception:
         df_absen = pd.DataFrame()
 
-    # 5. Olah data rekap per pegawai
     # 5. Olah data rekap per pegawai
     rekap_data = []
     for _, emp in df_pegawai.iterrows():
