@@ -526,7 +526,7 @@ if st.session_state.role == "Admin":
                     }, 100);
                 </script>
                 """
-                components.html(html_swal_nip, height=0)
+                st.html(html_swal_nip)
                 st.error("⚠️ DATA ASN TIDAK DITEMUKAN SILAHKAN MELAPORKAN KE ADMIN CABDIS (MOCHD GHAZALI/JEDDAH/GAZA)")
             else:
                 emp = df_peg_found.iloc[0]
