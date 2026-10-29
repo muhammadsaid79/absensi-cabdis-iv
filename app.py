@@ -1101,6 +1101,7 @@ elif st.session_state.role == "Superadmin":
                                         file_bytes = kompres_foto(foto_file_super.getvalue(), quality=60, max_size=(600, 600))
                                         url_foto = upload_ke_supabase(file_bytes, f"foto_acuan/{target_nip}.jpg", "image/jpeg")
                                         if url_foto:
+                                            url_foto = f"{url_foto}?t={int(time.time())}"
                                             supabase.table('pegawai').update({'photo_uploaded': True, 'photo_base64': url_foto}).eq('nip', target_nip).execute()
                                             st.success("✅ Foto acuan berhasil diperbarui dan dikunci secara langsung oleh Superadmin!")
                                             st.session_state[f'show_ganti_{target_nip}'] = False
