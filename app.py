@@ -655,7 +655,7 @@ if st.session_state.role == "Admin":
 # ==========================================
 # HAK AKSES 2: SUPERADMIN
 # ==========================================
-elif st.session_state.role == "Superadmin":
+elif st.session_state.role in ["Superadmin", "Admin Cuti"]:
     col_judul, col_tombol = st.columns([3, 1])
     col_judul.title(f"🛠️ {menu_superadmin}") # Judul dinamis mengikuti menu kiri
     col_tombol.button("🚪 Logout", on_click=logout, width="stretch", key="btn_logout_superadmin")
