@@ -411,10 +411,15 @@ if st.session_state.role is None:
                         is_valid = True
                         assigned_school = match.iloc[0]['sekolah']
                 if is_valid: 
-                    st.session_state.role = "Admin"
-                    st.session_state.admin_sekolah = assigned_school
-                    cookie_manager.set("auth_token", generate_signed_token("Admin"), key="set_token_login_admin")
-                    cookie_manager.set("admin_sekolah", assigned_school, key="set_sch_login_admin")
+                    if assigned_school == "AKUN_KHUSUS_CUTI":
+                        st.session_state.role = "Admin Cuti"
+                        cookie_manager.set("auth_token", generate_signed_token("Admin Cuti"), key="set_token_login_cuti")
+                        cookie_manager.set("admin_sekolah", assigned_school, key="set_sch_login_cuti")
+                    else:
+                        st.session_state.role = "Admin"
+                        st.session_state.admin_sekolah = assigned_school
+                        cookie_manager.set("auth_token", generate_signed_token("Admin"), key="set_token_login_admin")
+                        cookie_manager.set("admin_sekolah", assigned_school, key="set_sch_login_admin")
                     time.sleep(0.5)
                     st.rerun()
                 else: st.error("Username atau Password Salah!")
@@ -443,23 +448,25 @@ st.sidebar.markdown("**Waktu Server (WITA):**")
 st.sidebar.info(f"🕒 {waktu_sekarang.strftime('%H:%M:%S')} WITA\n\n📅 {waktu_sekarang.strftime('%d-%m-%Y')}")
 st.sidebar.write("---")
 
-# FITUR BARU: MENU NAVIGASI KIRI KHUSUS SUPERADMIN
+# FITUR BARU: MENU NAVIGASI KIRI KHUSUS SUPERADMIN & ADMIN CUTI
 menu_superadmin = None
 if st.session_state.role == "Superadmin":
     st.sidebar.markdown("### 🎛️ Menu Navigasi")
     menu_superadmin = st.sidebar.radio(
         "Pilih Halaman:",
         [
-            "📈 Rekap Absensi", 
-            "🟥 Laporan Indisipliner",
-            "🏛️ Data Sekolah", 
-            "💻 Kunci PC", 
-            "👥 Data Pegawai", 
-            "🔑 Akun Admin", 
-            "📝 Izin & Manual", 
-            "🚨 Database", 
-            "⚙️ Jam & GPS"
+            "📈 Rekap Absensi", "🟥 Laporan Indisipliner", "🏛️ Data Sekolah", 
+            "💻 Kunci PC", "👥 Data Pegawai", "🔑 Akun Admin", 
+            "📝 Izin & Manual", "🚨 Database", "⚙️ Jam & GPS"
         ],
+        label_visibility="collapsed"
+    )
+    st.sidebar.write("---")
+elif st.session_state.role == "Admin Cuti":
+    st.sidebar.markdown("### 🎛️ Menu Navigasi")
+    menu_superadmin = st.sidebar.radio(
+        "Pilih Halaman:",
+        ["📝 Izin & Manual"],
         label_visibility="collapsed"
     )
     st.sidebar.write("---")
@@ -1164,10 +1171,17 @@ elif st.session_state.role == "Superadmin":
         else:
             st.markdown("### ➕ Tambah Admin Baru")
             with st.form("form_tambah_admin"):
+                jenis_admin = st.radio("Pilih Jenis Akun:", ["Admin Sekolah", "Admin Cuti (Hanya Akses Izin & Manual)"], horizontal=True)
                 new_user = st.text_input("Username Baru")
                 new_pass = st.text_input("Password", type="password")
+                
                 opsi_sekolah_admin = ["Semua Sekolah"] + get_data_sekolah()['school_name'].tolist()
-                new_sekolah = st.selectbox("Akses Sekolah", opsi_sekolah_admin)
+                
+                if jenis_admin == "Admin Sekolah":
+                    new_sekolah = st.selectbox("Akses Sekolah", opsi_sekolah_admin)
+                else:
+                    new_sekolah = "AKUN_KHUSUS_CUTI"
+                    st.info("Akun ini hanya akan bisa mengakses menu Izin & Manual.")
                 
                 if st.form_submit_button("Simpan Admin"):
                     if new_user and new_pass:
@@ -1180,13 +1194,37 @@ elif st.session_state.role == "Superadmin":
                         st.error("Username dan Password wajib diisi!")
             
             st.markdown("---")
-            st.markdown("### 📋 Kelola Admin (Hapus)")
+            st.markdown("### 📋 Kelola Admin (Edit & Hapus)")
             df_admins = get_data_admin()
+            opsi_sekolah_admin = ["Semua Sekolah"] + get_data_sekolah()['school_name'].tolist()
+            
             for idx, row in df_admins.iterrows():
-                with st.expander(f"👤 {row['username']} - {row['sekolah']}"):
-                    if st.button("🗑️ Hapus Admin", key=f"del_adm_{row['id']}"):
+                role_label = "🧑‍💻 Admin Cuti" if row['sekolah'] == "AKUN_KHUSUS_CUTI" else "🏫 Admin Sekolah"
+                with st.expander(f"👤 {row['username']} - {role_label} ({row['sekolah']})"):
+                    edit_user = st.text_input("Username", value=row['username'], key=f"eu_{row['id']}")
+                    edit_pass = st.text_input("Password", value=row['password'], key=f"ep_{row['id']}")
+                    
+                    if row['sekolah'] == "AKUN_KHUSUS_CUTI":
+                        edit_sek = "AKUN_KHUSUS_CUTI"
+                    else:
+                        try:
+                            idx_sek = opsi_sekolah_admin.index(row['sekolah'])
+                        except ValueError:
+                            idx_sek = 0
+                        edit_sek = st.selectbox("Sekolah", opsi_sekolah_admin, index=idx_sek, key=f"es_{row['id']}")
+                        
+                    col_e1, col_e2 = st.columns(2)
+                    if col_e1.button("💾 Update Akun", key=f"upd_{row['id']}", type="primary"):
+                        supabase.table('admins').update({'username': edit_user, 'password': edit_pass, 'sekolah': edit_sek}).eq('id', row['id']).execute()
+                        st.cache_data.clear()
+                        st.success("Akun berhasil diupdate!")
+                        time.sleep(1)
+                        st.rerun()
+                    if col_e2.button("🗑️ Hapus Admin", key=f"del_{row['id']}"):
                         supabase.table('admins').delete().eq('id', row['id']).execute()
                         st.cache_data.clear()
+                        st.success("Akun dihapus!")
+                        time.sleep(1)
                         st.rerun()
 
     # ------------------------------------------
@@ -1242,6 +1280,25 @@ elif st.session_state.role == "Superadmin":
                         elif not surat_pdf:
                             st.error("❌ Anda harus mengunggah Surat berformat PDF.")
                         else:
+                            # === CEK DUPLIKASI IZIN SEBELUM SIMPAN ===
+                            try:
+                                cek_duplikat = supabase.table('absensi')\
+                                    .select('tanggal, status')\
+                                    .eq('nip', nip_target)\
+                                    .gte('tanggal', tgl_mulai_izin.strftime('%Y-%m-%d'))\
+                                    .lte('tanggal', tgl_selesai_izin.strftime('%Y-%m-%d'))\
+                                    .in_('status', ['CUTI', 'SAKIT', 'DINAS LUAR', 'IZIN LAINNYA'])\
+                                    .execute()
+                                
+                                if cek_duplikat.data and len(cek_duplikat.data) > 0:
+                                    status_bentrok = cek_duplikat.data[0]['status']
+                                    tgl_bentrok = cek_duplikat.data[0]['tanggal']
+                                    st.error(f"❌ DITOLAK: ASN tersebut sudah ada {status_bentrok} ditanggal {tgl_bentrok} yang anda input!")
+                                    st.stop() # Menghentikan proses agar tidak tersimpan
+                            except Exception as e:
+                                pass # Lanjut jika gagal query agar tidak memblokir aplikasi
+                                
+                            # === LANJUT KE PROSES UPLOAD PDF & INSERT ===
                             try:
                                 surat_bytes = surat_pdf.getvalue()
                                 timestamp_surat = int(time.time())
