@@ -1327,7 +1327,6 @@ elif st.session_state.role in ["Superadmin", "Admin Cuti"]:
                                 st.error(f"Gagal memproses pengajuan izin: {e}")
 
         st.markdown("---"))
-
         st.markdown("### ✍️ Input Absen Manual (Masuk/Pulang)")
         st.caption("Input absen manual ke database. ASN yang diinput di sini tidak perlu absen lagi di sekolah.")
 
