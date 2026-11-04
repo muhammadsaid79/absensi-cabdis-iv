@@ -1232,7 +1232,7 @@ elif st.session_state.role in ["Superadmin", "Admin Cuti"]:
     # ------------------------------------------
     elif menu_superadmin == "📝 Izin & Manual":
         st.markdown("### 📝 Input Izin / Cuti / Sakit / Dinas Luar")
-        st.caption("Cari NIP Pegawai, lengkapi formulir izin, dan upload surat PDF.")
+        st.caption("Cari NIP Pegawai dan lengkapi formulir izin.")
 
         with st.form("form_cari_nip_izin"):
             nip_input_izin = st.text_input("Masukkan NIP Pegawai:", placeholder="Ketik NIP lalu tekan enter atau cari")
@@ -1270,15 +1270,14 @@ elif st.session_state.role in ["Superadmin", "Admin Cuti"]:
                         tgl_selesai_izin = st.date_input("Sampai Tanggal:")
                         
                     keterangan_izin = st.text_area("Kolom Isian / Keterangan Izin:")
-                    surat_pdf = st.file_uploader("Upload Surat (Wajib PDF)", type=['pdf'])
+                    
+                    # Upload PDF telah dihapus untuk menghemat storage Supabase
                     
                     btn_kirim_izin = st.form_submit_button("KIRIM 🚀", type="primary")
                     
                     if btn_kirim_izin:
                         if tgl_mulai_izin > tgl_selesai_izin:
                             st.error("❌ Tanggal selesai tidak boleh mendahului tanggal mulai.")
-                        elif not surat_pdf:
-                            st.error("❌ Anda harus mengunggah Surat berformat PDF.")
                         else:
                             # === CEK DUPLIKASI IZIN SEBELUM SIMPAN ===
                             try:
@@ -1298,13 +1297,8 @@ elif st.session_state.role in ["Superadmin", "Admin Cuti"]:
                             except Exception as e:
                                 pass # Lanjut jika gagal query agar tidak memblokir aplikasi
                                 
-                            # === LANJUT KE PROSES UPLOAD PDF & INSERT ===
+                            # === LANJUT KE PROSES INSERT (TANPA UPLOAD PDF) ===
                             try:
-                                surat_bytes = surat_pdf.getvalue()
-                                timestamp_surat = int(time.time())
-                                file_path = f"surat_izin/{nip_target}_{timestamp_surat}.pdf"
-                                url_surat = upload_ke_supabase(surat_bytes, file_path, "application/pdf")
-                                
                                 delta_days = (tgl_selesai_izin - tgl_mulai_izin).days + 1
                                 records_izin = []
                                 
@@ -1318,7 +1312,7 @@ elif st.session_state.role in ["Superadmin", "Admin Cuti"]:
                                             'tanggal': current_date.strftime('%Y-%m-%d'),
                                             'jam': '-',
                                             'status': jenis_izin.upper(),
-                                            'foto_bukti': url_surat 
+                                            'foto_bukti': None  # Tidak ada file foto_bukti
                                         })
                                         
                                 if records_izin:
@@ -1332,7 +1326,7 @@ elif st.session_state.role in ["Superadmin", "Admin Cuti"]:
                             except Exception as e:
                                 st.error(f"Gagal memproses pengajuan izin: {e}")
 
-        st.markdown("---")
+        st.markdown("---"))
 
         st.markdown("### ✍️ Input Absen Manual (Masuk/Pulang)")
         st.caption("Input absen manual ke database. ASN yang diinput di sini tidak perlu absen lagi di sekolah.")
