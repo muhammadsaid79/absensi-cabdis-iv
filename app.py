@@ -1151,8 +1151,9 @@ elif st.session_state.role in ["Superadmin", "Admin Cuti"]:
                                             st.session_state[f'show_ganti_{target_nip}'] = False
                                             time.sleep(1)
                                             st.rerun()
-
+                    actual_nip_db = str(emp_edit['nip'])
                     with st.form("form_update_pegawai"):
+                        edit_nip = st.text_input("NIP Pegawai:", value=str(emp_edit.get('nip', target_nip)).strip())
                         edit_nama = st.text_input("Nama Pegawai:", value=emp_edit.get('name', ''))
                         
                         df_sch_opt_edit = get_data_sekolah()
@@ -1180,19 +1181,21 @@ elif st.session_state.role in ["Superadmin", "Admin Cuti"]:
                         
                         if btn_simpan_edit:
                             try:
+                                new_nip = edit_nip.strip()
                                 update_payload = {
+                                    'nip': new_nip,
                                     'name': edit_nama.strip(),
                                     'school_name': edit_sekolah.strip(),
-                                    'is_cadar': edit_cadar
+                                    'is_cadar': bool(edit_cadar)
                                 }
                                 
                                 if current_photo_uploaded and buka_kunci_foto:
                                     update_payload['photo_uploaded'] = False
                                     
-                                supabase.table('pegawai').update(update_payload).eq('nip', target_nip).execute()
+                                supabase.table('pegawai').update(update_payload).eq('nip', actual_nip_db).execute()
                                 
                                 st.success("✅ Data pegawai & status kunci berhasil diperbarui!")
-                                st.session_state.edit_nip_target = None
+                                st.session_state.edit_nip_target = new_nip
                                 st.session_state.show_photo_nip = None
                                 time.sleep(1)
                                 st.rerun()
