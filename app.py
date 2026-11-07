@@ -59,7 +59,9 @@ def upload_ke_supabase(file_bytes, file_path, content_type):
             file=file_bytes,
             file_options={"content-type": content_type, "upsert": "true"}
         )
-        return supabase.storage.from_(foto_pegawai).get_public_url(file_path)
+        base_url = supabase.storage.from_(foto_pegawai).get_public_url(file_path)
+        # Menambahkan timestamp otomatis agar browser langsung memuat foto terbaru
+        return f"{base_url}?v={int(time.time())}"
     except Exception as e:
         st.error(f"Gagal upload ke server Storage: {e}")
         return None
