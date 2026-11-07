@@ -128,7 +128,11 @@ st.markdown("""
         visibility: hidden !important;
         opacity: 0 !important;
         height: 0px !important;
+        width: 0px !important;
         pointer-events: none !important;
+        position: absolute !important;
+        top: -9999px !important;
+        left: -9999px !important;
     }
     
     /* SETTING SIDEBAR PATEN, LEBAR PROPORSIONAL & LEGA */
