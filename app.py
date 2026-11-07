@@ -104,21 +104,23 @@ st.markdown("""
     @import url('https://fonts.googleapis.com/css2?family=Poppins:wght@300;400;600;700&display=swap');
     html, body, [class*="css"] { font-family: 'Poppins', sans-serif !important; }
     
-    /* HILANGKAN FOOTER, TOOLBAR, DAN BADGE MELAYANG DI POJOK KANAN BAWAH */
+    /* HILANGKAN FOOTER, TOOLBAR, DAN BADGE MELAYANG POJOK KANAN BAWAH */
     footer { display: none !important; visibility: hidden !important; }
     header { display: none !important; visibility: hidden !important; height: 0px !important; }
-    [data-testid="stHeader"] { display: none !important; visibility: hidden !important; }
-    [data-testid="stToolbar"] { display: none !important; visibility: hidden !important; }
-    [data-testid="stDecoration"] { display: none !important; visibility: hidden !important; }
-    [data-testid="stStatusWidget"] { display: none !important; visibility: hidden !important; }
-    [data-testid="stAppDeployButton"] { display: none !important; visibility: hidden !important; }
-    #MainMenu { display: none !important; visibility: hidden !important; }
+    [data-testid="stHeader"] { display: none !important; }
+    [data-testid="stToolbar"] { display: none !important; }
+    [data-testid="stDecoration"] { display: none !important; }
+    [data-testid="stStatusWidget"] { display: none !important; }
+    [data-testid="stAppDeployButton"] { display: none !important; }
+    #MainMenu { display: none !important; }
     
-    /* TARGET KHUSUS BADGE PROFIL & "HOSTED WITH STREAMLIT" */
-    div[class*="viewerBadge"] { display: none !important; visibility: hidden !important; opacity: 0 !important; height: 0 !important; }
-    div[class*="styles_viewerBadge"] { display: none !important; visibility: hidden !important; opacity: 0 !important; height: 0 !important; }
-    div[class*="viewerBadge_container"] { display: none !important; visibility: hidden !important; opacity: 0 !important; height: 0 !important; }
-    div[class*="stAppHost"] { display: none !important; visibility: hidden !important; opacity: 0 !important; height: 0 !important; }
+    /* TARGET KHUSUS HOSTER & BADGE STREAMLIT */
+    .stAppViewerBadge { display: none !important; }
+    [data-testid="stViewerBadge"] { display: none !important; }
+    div[class*="viewerBadge"] { display: none !important; visibility: hidden !important; opacity: 0 !important; }
+    div[class*="styles_viewerBadge"] { display: none !important; visibility: hidden !important; opacity: 0 !important; }
+    div[class*="viewerBadge_container"] { display: none !important; visibility: hidden !important; opacity: 0 !important; }
+    div[class*="stAppHost"] { display: none !important; visibility: hidden !important; opacity: 0 !important; }
     a[href*="streamlit.io"] { display: none !important; visibility: hidden !important; }
     a[href*="share.streamlit.io"] { display: none !important; visibility: hidden !important; }
     
