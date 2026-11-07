@@ -104,10 +104,19 @@ st.markdown("""
     @import url('https://fonts.googleapis.com/css2?family=Poppins:wght@300;400;600;700&display=swap');
     html, body, [class*="css"] { font-family: 'Poppins', sans-serif !important; }
     
-    /* MENYEMBUNYIKAN HEADER & TOOLBAR BAWAAN STREAMLIT */
+    /* HILANGKAN FOOTER, TOOLBAR, DAN BADGE STREAMLIT */
     header { visibility: hidden !important; height: 0px !important; } 
-    [data-testid="stToolbar"], [data-testid="stDecoration"], footer, #MainMenu { visibility: hidden !important; }
+    footer { visibility: hidden !important; display: none !important; }
+    [data-testid="stHeader"] { visibility: hidden !important; display: none !important; }
+    [data-testid="stToolbar"] { visibility: hidden !important; display: none !important; }
+    [data-testid="stDecoration"] { visibility: hidden !important; display: none !important; }
+    [data-testid="stStatusWidget"] { visibility: hidden !important; display: none !important; }
     [data-testid="stHeaderActionElements"], .header-anchor { display: none !important; }
+    #MainMenu { visibility: hidden !important; display: none !important; }
+    div[class*="viewerBadge"] { display: none !important; visibility: hidden !important; }
+    div[class*="styles_viewerBadge"] { display: none !important; visibility: hidden !important; }
+    .viewerBadge_container__1QSob { display: none !important; }
+    a[href*="streamlit.io"] { display: none !important; }
     
     /* SETTING SIDEBAR PATEN, LEBAR PROPORSIONAL & LEGA */
     [data-testid="stSidebar"] {
