@@ -104,32 +104,25 @@ st.markdown("""
     @import url('https://fonts.googleapis.com/css2?family=Poppins:wght@300;400;600;700&display=swap');
     html, body, [class*="css"] { font-family: 'Poppins', sans-serif !important; }
     
-    /* HILANGKAN SELURUH TOOLBAR, HEADER, FOOTER, DAN BADGE HOSTER STREAMLIT */
-    footer, header, #MainMenu,
-    [data-testid="stHeader"],
-    [data-testid="stToolbar"],
-    [data-testid="stDecoration"],
-    [data-testid="stStatusWidget"],
-    [data-testid="stAppDeployButton"],
-    [data-testid="stViewerBadge"],
-    [data-testid="manage-app-button"],
-    .stAppViewerBadge,
-    div[class*="viewerBadge"],
-    div[class*="styles_viewerBadge"],
-    div[class*="viewerBadge_container"],
-    div[class*="stAppHost"],
-    div[class*="stAppViewerBadge"],
-    div[class*="stDecoration"],
-    div[class*="floating"],
-    a[href*="streamlit.io"],
-    a[href*="share.streamlit.io"],
-    iframe[title*="streamlit"] {
-        display: none !important;
-        visibility: hidden !important;
-        opacity: 0 !important;
-        height: 0px !important;
-        pointer-events: none !important;
-    }
+    /* HILANGKAN FOOTER, TOOLBAR, DAN BADGE MELAYANG POJOK KANAN BAWAH */
+    footer { display: none !important; visibility: hidden !important; }
+    header { display: none !important; visibility: hidden !important; height: 0px !important; }
+    [data-testid="stHeader"] { display: none !important; }
+    [data-testid="stToolbar"] { display: none !important; }
+    [data-testid="stDecoration"] { display: none !important; }
+    [data-testid="stStatusWidget"] { display: none !important; }
+    [data-testid="stAppDeployButton"] { display: none !important; }
+    #MainMenu { display: none !important; }
+    
+    /* TARGET KHUSUS HOSTER & BADGE STREAMLIT */
+    .stAppViewerBadge { display: none !important; }
+    [data-testid="stViewerBadge"] { display: none !important; }
+    div[class*="viewerBadge"] { display: none !important; visibility: hidden !important; opacity: 0 !important; }
+    div[class*="styles_viewerBadge"] { display: none !important; visibility: hidden !important; opacity: 0 !important; }
+    div[class*="viewerBadge_container"] { display: none !important; visibility: hidden !important; opacity: 0 !important; }
+    div[class*="stAppHost"] { display: none !important; visibility: hidden !important; opacity: 0 !important; }
+    a[href*="streamlit.io"] { display: none !important; visibility: hidden !important; }
+    a[href*="share.streamlit.io"] { display: none !important; visibility: hidden !important; }
     
     /* SETTING SIDEBAR PATEN, LEBAR PROPORSIONAL & LEGA */
     [data-testid="stSidebar"] {
@@ -167,56 +160,34 @@ st.markdown("""
     }
     div.stButton > button:hover { background-color: #1D4ED8 !important; box-shadow: 0 4px 10px rgba(37, 99, 235, 0.3); }
     
-    /* DESAIN MENU SIDEBAR */
-    div.row-widget.stRadio > div { gap: 0.4rem !important; }
+    /* DESAIN MENU SIDEBAR (SPASI PADAT & HURUF PAS DENGAN INFO AKUN) */
+    div.row-widget.stRadio > div { 
+        gap: 0.4rem !important; 
+    }
     div.row-widget.stRadio > div > label {
-        background-color: #ffffff; padding: 10px 14px; border-radius: 3px;
-        border: 1px solid #E2E8F0; cursor: pointer; transition: 0.3s;
+        background-color: #ffffff; 
+        padding: 10px 14px; 
+        border-radius: 3px;
+        border: 1px solid #E2E8F0; 
+        cursor: pointer; 
+        transition: 0.3s;
     }
+    
+    /* UKURAN HURUF MENU SIDEBAR */
     div.row-widget.stRadio > div > label > div.st-markdown-container > p {
-        font-size: 1rem !important; font-weight: 700 !important;
+        font-size: 1rem !important; 
+        font-weight: 700 !important;
     }
+    
     div.row-widget.stRadio > div > label:hover { background-color: #F1F5F9; border-color: #CBD5E1; }
     div.row-widget.stRadio > div > label[data-checked="true"] {
         background-color: #2563EB !important; color: white !important;
         border-color: #2563EB !important; box-shadow: 0 4px 10px rgba(37, 99, 235, 0.2);
     }
+    /* MENGHILANGKAN BULATAN RADIO BAWAAN */
     div.row-widget.stRadio > div > label > div:first-child { display: none; }
     </style>
 """, unsafe_allow_html=True)
-
-# INJEKSI SKRIP JAVASCRIPT UNTUK MENGHAPUS ELEMEN POJOK BAWAH DARI PARENT DOCUMENT
-st.html("""
-    <script>
-    function bersihkanBadgeStreamlit() {
-        try {
-            const targetDoc = window.parent.document || document;
-            const selectors = [
-                '[data-testid="stStatusWidget"]',
-                '[data-testid="stViewerBadge"]',
-                '[data-testid="manage-app-button"]',
-                '.stAppViewerBadge',
-                'div[class*="viewerBadge"]',
-                'div[class*="styles_viewerBadge"]',
-                'div[class*="viewerBadge_container"]',
-                'div[class*="stAppHost"]',
-                'a[href*="streamlit.io"]',
-                'a[href*="share.streamlit.io"]'
-            ];
-            selectors.forEach(selector => {
-                const els = targetDoc.querySelectorAll(selector);
-                els.forEach(el => {
-                    el.style.setProperty('display', 'none', 'important');
-                    el.style.setProperty('visibility', 'hidden', 'important');
-                    el.style.setProperty('opacity', '0', 'important');
-                });
-            });
-        } catch(e) {}
-    }
-    setInterval(bersihkanBadgeStreamlit, 400);
-    bersihkanBadgeStreamlit();
-    </script>
-"""))
 
 # --- 4. FUNGSI INTERAKSI DATABASE (OPTIMASI CACHING UNTUK MENGHEMAT EGRESS) ---
 @st.cache_data(ttl=86400)
