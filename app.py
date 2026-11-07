@@ -105,6 +105,25 @@ st.markdown("""
     html, body, [class*="css"] { font-family: 'Poppins', sans-serif !important; }
     
     /* HILANGKAN FOOTER, TOOLBAR, DAN BADGE MELAYANG POJOK KANAN BAWAH */
+    /* PAKSA HILANGKAN 2 IKON BADGE POJOK KANAN BAWAH STREAMLIT CLOUD */
+    [data-testid="stStatusWidget"],
+    [data-testid="stAppDeployButton"],
+    [data-testid="stViewerBadge"],
+    .stAppViewerBadge,
+    div[class*="viewerBadge"],
+    div[class*="styles_viewerBadge"],
+    div[class*="viewerBadge_container"],
+    div[class*="stAppHost"],
+    div[class*="HostContainer"],
+    div[class*="FloatingButton"],
+    footer, header {
+        display: none !important;
+        visibility: hidden !important;
+        opacity: 0 !important;
+        pointer-events: none !important;
+        height: 0px !important;
+        width: 0px !important;
+    }
     footer { display: none !important; visibility: hidden !important; }
     header { display: none !important; visibility: hidden !important; height: 0px !important; }
     [data-testid="stHeader"] { display: none !important; }
