@@ -1044,7 +1044,7 @@ elif st.session_state.role in ["Superadmin", "Admin Cuti"]:
                     
                     records = []
                     for _, r in df_upload.iterrows():
-                        nip_v = str(r['nip']).strip() if pd.notna(r.get('nip')) else ""
+                        nip_v = str(r['nip']).strip().replace(" ", "").replace("\t", "") if pd.notna(r.get('nip')) else ""
                         name_v = str(r['name']).strip() if pd.notna(r.get('name')) else ""
                         sch_v = str(r['school_name']).strip() if pd.notna(r.get('school_name')) else ""
                         
@@ -1091,7 +1091,7 @@ elif st.session_state.role in ["Superadmin", "Admin Cuti"]:
             if st.session_state.get('edit_nip_target'):
                 target_nip = st.session_state.edit_nip_target
                 try:
-                    res_edit = supabase.table('pegawai').select('nip, name, school_name, photo_uploaded, is_cadar').eq('nip', target_nip).execute()
+                    res_edit = supabase.table('pegawai').select('nip, name, school_name, photo_uploaded, is_cadar').ilike('nip', f"%{target_nip}%").execute()
                     df_edit = pd.DataFrame(res_edit.data) if res_edit.data else pd.DataFrame()
                 except Exception as e:
                     df_edit = pd.DataFrame()
