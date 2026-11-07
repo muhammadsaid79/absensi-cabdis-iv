@@ -1,5 +1,5 @@
 [client]
-toolbarMode = "off"
+toolbarMode = "minimal"
 showErrorDetails = false
 
 [server]
