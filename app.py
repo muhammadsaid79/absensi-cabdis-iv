@@ -1124,7 +1124,10 @@ elif st.session_state.role in ["Superadmin", "Admin Cuti"]:
                             res_photo = supabase.table('pegawai').select('photo_base64').eq('nip', target_nip).execute()
                             if res_photo.data and res_photo.data[0].get('photo_base64'):
                                 photo_url_or_base64 = res_photo.data[0]['photo_base64']
-                                st.image(photo_url_or_base64, caption=f"Foto Acuan: {emp_edit.get('name', '')}", width=250)
+                                # Bersihkan query tanda tanya lama dan berikan timestamp segar
+                                clean_url = photo_url_or_base64.split('?')[0]
+                                fresh_url = f"{clean_url}?t={int(time.time())}"
+                                st.image(fresh_url, caption=f"Foto Acuan: {emp_edit.get('name', '')}", width=250)
                             else:
                                 st.warning("Data foto tidak ditemukan.")
                         except Exception as e_foto:
