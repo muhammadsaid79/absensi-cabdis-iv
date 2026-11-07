@@ -103,7 +103,15 @@ st.markdown("""
     <style>
     @import url('https://fonts.googleapis.com/css2?family=Poppins:wght@300;400;600;700&display=swap');
     html, body, [class*="css"] { font-family: 'Poppins', sans-serif !important; }
-    
+    /* HILANGKAN IKON RANTAI / ANCHOR LINK PADA SELURUH JUDUL HEADER */
+    [data-testid="stHeaderActionElements"],
+    a.anchor-link,
+    .header-anchor,
+    .stMarkdown a[href^="#"] {
+        display: none !important;
+        visibility: hidden !important;
+        pointer-events: none !important;
+    }
     /* HILANGKAN FOOTER, TOOLBAR, DAN BADGE MELAYANG POJOK KANAN BAWAH */
     /* PAKSA HILANGKAN 2 IKON BADGE POJOK KANAN BAWAH STREAMLIT CLOUD */
     [data-testid="stStatusWidget"],
