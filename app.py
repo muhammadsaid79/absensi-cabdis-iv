@@ -1309,7 +1309,7 @@ elif st.session_state.role in ["Superadmin", "Admin Cuti"]:
                 st.success(f"👤 Data Ditemukan: **{peg_izin['name']}** ({peg_izin['school_name']})")
                 
                 with st.form("form_pengajuan_izin"):
-                    jenis_izin = st.selectbox("Pilih Jenis Izin:", ["Cuti", "Sakit", "Dinas Luar", "Izin Lainnya"])
+                    jenis_izin = st.selectbox("Pilih Jenis Izin:", ["Cuti", "Sakit", "Dinas Luar", "Izin"])
                     
                     col_t1, col_t2 = st.columns(2)
                     with col_t1:
