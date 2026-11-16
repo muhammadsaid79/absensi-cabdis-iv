@@ -385,7 +385,7 @@ for key_state, val in {
     'menu_unlocked': False,
     'admin_dashboard_unlocked': False,
     'edit_nip_target': None,
-    'show_photo_nip': None
+    'show_photo_nip': None,
     'massal_pegawai_list': [],
     'massal_params': None
 }.items():
