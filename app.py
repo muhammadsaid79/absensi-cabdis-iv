@@ -386,6 +386,8 @@ for key_state, val in {
     'admin_dashboard_unlocked': False,
     'edit_nip_target': None,
     'show_photo_nip': None
+    'massal_pegawai_list': [],
+    'massal_params': None
 }.items():
     if key_state not in st.session_state: st.session_state[key_state] = val
 
@@ -499,7 +501,7 @@ if st.session_state.role == "Superadmin":
         [
             "📈 Rekap Absensi", "🟥 Laporan Indisipliner", "🏛️ Data Sekolah", 
             "💻 Kunci PC", "👥 Data Pegawai", "🔑 Akun Admin", 
-            "📝 Izin & Manual", "🚨 Database", "⚙️ Jam & GPS"
+            "📝 Izin & Manual", "📋 Absensi Massal", "🚨 Database", "⚙️ Jam & GPS"
         ],
         label_visibility="collapsed"
     )
@@ -1443,7 +1445,152 @@ elif st.session_state.role in ["Superadmin", "Admin Cuti"]:
                             st.rerun()
                         except Exception as e:
                             st.error(f"❌ Gagal menyimpan absen manual: {e}")
+                            
+    # ------------------------------------------
+    # 7.5. MENU ABSENSI MASSAL (KHUSUS SUPERADMIN)
+    # ------------------------------------------
+    elif menu_superadmin == "📋 Absensi Massal":
+        st.markdown("### 📋 Absensi Massal Pegawai Per Sekolah")
+        st.caption("Isi seluruh parameter di bawah ini secara lengkap untuk menampilkan daftar pegawai ASN sekolah.")
 
+        with st.form("form_cari_absensi_massal"):
+            sekolah_massal = st.text_input("Nama Sekolah:", placeholder="Contoh: SMAN 1 WAJO")
+            
+            col_m1, col_m2, col_m3 = st.columns(3)
+            with col_m1:
+                tgl_massal = st.date_input("Tanggal Absensi:", value=None)
+            with col_m2:
+                jam_massal = st.time_input("Jam Absensi:", value=None)
+            with col_m3:
+                status_massal = st.selectbox("Status Absensi:", ["Masuk", "Pulang"], index=None, placeholder="Pilih Masuk / Pulang")
+                
+            btn_cari_massal = st.form_submit_button("🔍 Cari Pegawai", type="primary")
+
+        if btn_cari_massal:
+            # Validasi ketat: tolak jika ada satu saja kolom yang kosong
+            if not sekolah_massal.strip() or tgl_massal is None or jam_massal is None or status_massal is None:
+                st.error("❌ DITOLAK: Nama Sekolah, Tanggal, Jam, dan Status (Masuk/Pulang) wajib diisi semua sebelum mencari!")
+                st.session_state['massal_pegawai_list'] = []
+                st.session_state['massal_params'] = None
+            else:
+                sekolah_clean = sekolah_massal.strip()
+                try:
+                    # Hanya tarik 3 kolom (nip, name, school_name) agar kuota Egress sangat irit
+                    res_peg = supabase.table('pegawai').select('nip, name, school_name').ilike('school_name', f"%{sekolah_clean}%").execute()
+                    data_peg = res_peg.data if res_peg.data else []
+                    
+                    if not data_peg:
+                        st.warning(f"⚠️ Tidak ditemukan data pegawai ASN untuk sekolah: **{sekolah_clean}**")
+                        st.session_state['massal_pegawai_list'] = []
+                        st.session_state['massal_params'] = None
+                    else:
+                        st.session_state['massal_pegawai_list'] = data_peg
+                        st.session_state['massal_params'] = {
+                            'sekolah': sekolah_clean,
+                            'tanggal': tgl_massal.strftime('%Y-%m-%d'),
+                            'tanggal_tampil': tgl_massal.strftime('%d-%m-%Y'),
+                            'jam': jam_massal.strftime('%H:%M'),
+                            'status_label': status_massal
+                        }
+                        # Reset seluruh centang ke posisi kosong saat pencarian baru
+                        st.session_state['chk_all_massal'] = False
+                        for p in data_peg:
+                            st.session_state[f"chk_massal_{p['nip']}"] = False
+                except Exception as e:
+                    st.error(f"Gagal mengambil data pegawai: {e}")
+
+        # Tampilkan daftar pegawai jika pencarian berhasil
+        if st.session_state.get('massal_pegawai_list') and st.session_state.get('massal_params'):
+            list_peg = st.session_state['massal_pegawai_list']
+            params = st.session_state['massal_params']
+            
+            st.markdown("---")
+            st.info(
+                f"🏫 **Sekolah:** {params['sekolah']} | "
+                f"📅 **Tanggal:** {params['tanggal_tampil']} | "
+                f"🕒 **Jam:** {params['jam']} WITA | "
+                f"📌 **Status:** {params['status_label']} (**{len(list_peg)} Pegawai**)"
+            )
+
+            # Fungsi otomatis saat kotak Ceklis All diklik
+            def toggle_semua_pegawai():
+                status_cek = st.session_state.get('chk_all_massal', False)
+                for item in st.session_state['massal_pegawai_list']:
+                    st.session_state[f"chk_massal_{item['nip']}"] = status_cek
+
+            st.checkbox("✅ Ceklis All (Pilih Semua Pegawai)", key="chk_all_massal", on_change=toggle_semua_pegawai)
+            st.write("")
+
+            # Header Tabel Daftar Pegawai
+            h_chk, h_nama, h_nip, h_sek = st.columns([0.8, 3, 2.5, 2.5])
+            h_chk.markdown("**Pilih**")
+            h_nama.markdown("**Nama Pegawai**")
+            h_nip.markdown("**NIP**")
+            h_sek.markdown("**Nama Sekolah**")
+
+            pegawai_terpilih = []
+            for p in list_peg:
+                nip_str = str(p['nip']).strip()
+                c_chk, c_nama, c_nip, c_sek = st.columns([0.8, 3, 2.5, 2.5])
+                
+                dipilih = c_chk.checkbox("Pilih", key=f"chk_massal_{nip_str}", label_visibility="collapsed")
+                c_nama.write(p.get('name', '-'))
+                c_nip.write(nip_str)
+                c_sek.write(p.get('school_name', '-'))
+                
+                if dipilih:
+                    pegawai_terpilih.append(p)
+
+            st.markdown("---")
+            if st.button(f"🚀 Kirim Absensi Massal ({len(pegawai_terpilih)} Pegawai Terpilih)", type="primary"):
+                if not pegawai_terpilih:
+                    st.warning("⚠️ Silakan centang minimal 1 pegawai (atau klik Ceklis All) sebelum menekan Kirim.")
+                else:
+                    try:
+                        # Konversi 'Masuk' -> 'DATANG' dan 'Pulang' -> 'PULANG' agar sinkron dengan rumus Rekap Absensi
+                        status_db = "DATANG" if params['status_label'] == "Masuk" else "PULANG"
+                        
+                        # Cek data yang sudah terabsen pada tanggal & status tersebut agar tidak dobel
+                        cek_ada = supabase.table('absensi').select('nip')\
+                            .ilike('sekolah', f"%{params['sekolah']}%")\
+                            .eq('tanggal', params['tanggal'])\
+                            .eq('status', status_db).execute()
+                        nip_sudah_absen = {str(row['nip']).strip() for row in (cek_ada.data or [])}
+
+                        records_to_insert = []
+                        dilewati = 0
+                        for p_sel in pegawai_terpilih:
+                            nip_clean = str(p_sel['nip']).strip()
+                            if nip_clean in nip_sudah_absen:
+                                dilewati += 1
+                                continue
+                            records_to_insert.append({
+                                'nip': nip_clean,
+                                'nama': p_sel.get('name', ''),
+                                'sekolah': p_sel.get('school_name', params['sekolah']),
+                                'tanggal': params['tanggal'],
+                                'jam': params['jam'],
+                                'status': status_db,
+                                'jarak_m': 'Absen Massal Admin',
+                                'foto_bukti': None
+                            })
+
+                        if records_to_insert:
+                            # Kirim sekaligus dalam 1 paket request (sangat hemat kuota)
+                            supabase.table('absensi').insert(records_to_insert).execute()
+                            pesan_sukses = f"✅ Berhasil mengabsenkan **{len(records_to_insert)} pegawai** ({params['status_label']}) pada tanggal {params['tanggal_tampil']}!"
+                            if dilewati > 0:
+                                pesan_sukses += f" ({dilewati} pegawai dilewati karena sudah tercatat absen sebelumnya)."
+                            st.success(pesan_sukses)
+                            st.session_state['massal_pegawai_list'] = []
+                            st.session_state['massal_params'] = None
+                            time.sleep(2)
+                            st.rerun()
+                        else:
+                            st.warning(f"⚠️ Seluruh pegawai yang dipilih ({dilewati} orang) sudah memiliki catatan absen **{params['status_label']}** pada tanggal {params['tanggal_tampil']}.")
+                    except Exception as e:
+                        st.error(f"❌ Gagal mengirim absensi massal: {e}")
+                        
     # ------------------------------------------
     # 8. MENU DATABASE
     # ------------------------------------------
