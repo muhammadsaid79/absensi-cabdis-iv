@@ -387,7 +387,8 @@ for key_state, val in {
     'edit_nip_target': None,
     'show_photo_nip': None,
     'massal_pegawai_list': [],
-    'massal_params': None
+    'massal_params': None,
+    'massal_notif_konfirmasi': None
 }.items():
     if key_state not in st.session_state: st.session_state[key_state] = val
 
@@ -1453,6 +1454,14 @@ elif st.session_state.role in ["Superadmin", "Admin Cuti"]:
         st.markdown("### 📋 Absensi Massal Pegawai Per Sekolah")
         st.caption("Isi seluruh parameter di bawah ini secara lengkap untuk menampilkan daftar pegawai ASN sekolah.")
 
+        # Kotak Notifikasi Persisten (Tidak hilang sebelum tombol Konfirmasi diklik)
+        if st.session_state.get('massal_notif_konfirmasi'):
+            st.success(f"✅ **{st.session_state['massal_notif_konfirmasi']}**")
+            if st.button("🆗 Konfirmasi", key="btn_konfirmasi_massal", type="primary"):
+                st.session_state['massal_notif_konfirmasi'] = None
+                st.rerun()
+            st.markdown("---")
+
         with st.form("form_cari_absensi_massal"):
             sekolah_massal = st.text_input("Nama Sekolah:", placeholder="Contoh: SMAN 1 WAJO")
             
@@ -1578,13 +1587,16 @@ elif st.session_state.role in ["Superadmin", "Admin Cuti"]:
                         if records_to_insert:
                             # Kirim sekaligus dalam 1 paket request (sangat hemat kuota)
                             supabase.table('absensi').insert(records_to_insert).execute()
-                            pesan_sukses = f"✅ Berhasil mengabsenkan **{len(records_to_insert)} pegawai** ({params['status_label']}) pada tanggal {params['tanggal_tampil']}!"
+                            
+                            status_upper = params['status_label'].upper()
+                            sekolah_upper = params['sekolah'].upper()
+                            teks_notif = f"ABSENSI MANUAL {status_upper} {sekolah_upper} sebanyak {len(records_to_insert)} pegawai"
                             if dilewati > 0:
-                                pesan_sukses += f" ({dilewati} pegawai dilewati karena sudah tercatat absen sebelumnya)."
-                            st.success(pesan_sukses)
+                                teks_notif += f" ({dilewati} pegawai dilewati karena sudah tercatat absen sebelumnya)"
+                                
+                            st.session_state['massal_notif_konfirmasi'] = teks_notif
                             st.session_state['massal_pegawai_list'] = []
                             st.session_state['massal_params'] = None
-                            time.sleep(2)
                             st.rerun()
                         else:
                             st.warning(f"⚠️ Seluruh pegawai yang dipilih ({dilewati} orang) sudah memiliki catatan absen **{params['status_label']}** pada tanggal {params['tanggal_tampil']}.")
