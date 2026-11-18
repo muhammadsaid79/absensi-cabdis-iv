@@ -53,6 +53,7 @@ except Exception as e:
 
 def upload_ke_supabase(file_bytes, file_path, content_type):
     foto_pegawai = "foto_pegawai"
+    file_path = "".join(c for c in file_path if 32 < ord(c) < 127)
     try:
         supabase.storage.from_(foto_pegawai).upload(
             path=file_path,
@@ -592,7 +593,7 @@ if st.session_state.role == "Admin":
             else:
                 emp = df_peg_found.iloc[0]
                 raw_nip_db = str(emp['nip'])
-                nip_peg = raw_nip_db.strip()
+                nip_peg = "".join(c for c in raw_nip_db if c.isdigit()) or raw_nip_db.strip()
                 nama_peg = emp['name']
                 is_cadar = str(emp.get('is_cadar', 'False')).lower() == 'true'
                 is_uploaded = str(emp.get('photo_uploaded', False)).lower() == 'true'
