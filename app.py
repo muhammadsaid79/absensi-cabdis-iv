@@ -550,17 +550,26 @@ if st.session_state.role == "Admin":
                 st.warning("Silahkan masukkan NIP terlebih dahulu.")
 
         if st.session_state.last_searched_nip_foto:
-            snip = st.session_state.last_searched_nip_foto.strip()
+            raw_snip = str(st.session_state.last_searched_nip_foto)
+            snip = "".join(c for c in raw_snip if c.isdigit()) or raw_snip.strip()
+            df_peg_found = pd.DataFrame()
+
             try:
-                query_peg = supabase.table('pegawai').select('nip, name, school_name, photo_uploaded, photo_base64, is_cadar').ilike('nip', f"%{snip}%")
-                if admin_akses != "Semua Sekolah":
-                    query_peg = query_peg.ilike('school_name', f"%{admin_akses.strip()}%")
-                res_peg = query_peg.execute()
-                df_peg_found = pd.DataFrame(res_peg.data) if res_peg.data else pd.DataFrame()
-                if not df_peg_found.empty:
-                    df_peg_found = df_peg_found[df_peg_found['nip'].astype(str).str.strip() == snip]
-            except:
-                df_peg_found = pd.DataFrame()
+                res_peg = supabase.table('pegawai').select('nip, name, school_name, photo_uploaded, is_cadar').ilike('nip', f"%{snip}%").execute()
+                df_raw = pd.DataFrame(res_peg.data) if res_peg.data else pd.DataFrame()
+
+                if not df_raw.empty:
+                    df_raw['nip_clean'] = df_raw['nip'].astype(str).apply(lambda x: "".join(c for c in x if c.isdigit()) or x.strip())
+                    df_match = df_raw[df_raw['nip_clean'] == snip]
+
+                    if not df_match.empty:
+                        if admin_akses == "Semua Sekolah":
+                            df_peg_found = df_match
+                        else:
+                            target_sch = " ".join(str(admin_akses).split()).upper()
+                            df_peg_found = df_match[df_match['school_name'].astype(str).apply(lambda x: " ".join(x.split()).upper()) == target_sch]
+            except Exception as e:
+                st.error(f"Error database: {e}")
 
             if df_peg_found.empty:
                 html_swal_nip = """
