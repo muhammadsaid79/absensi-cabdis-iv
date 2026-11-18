@@ -550,13 +550,15 @@ if st.session_state.role == "Admin":
                 st.warning("Silahkan masukkan NIP terlebih dahulu.")
 
         if st.session_state.last_searched_nip_foto:
-            snip = st.session_state.last_searched_nip_foto
+            snip = st.session_state.last_searched_nip_foto.strip()
             try:
-                query_peg = supabase.table('pegawai').select('nip, name, school_name, photo_uploaded, photo_base64, is_cadar').eq('nip', str(snip))
+                query_peg = supabase.table('pegawai').select('nip, name, school_name, photo_uploaded, photo_base64, is_cadar').ilike('nip', f"%{snip}%")
                 if admin_akses != "Semua Sekolah":
-                    query_peg = query_peg.eq('school_name', admin_akses)
+                    query_peg = query_peg.ilike('school_name', f"%{admin_akses.strip()}%")
                 res_peg = query_peg.execute()
                 df_peg_found = pd.DataFrame(res_peg.data) if res_peg.data else pd.DataFrame()
+                if not df_peg_found.empty:
+                    df_peg_found = df_peg_found[df_peg_found['nip'].astype(str).str.strip() == snip]
             except:
                 df_peg_found = pd.DataFrame()
 
@@ -567,7 +569,7 @@ if st.session_state.role == "Admin":
                     setTimeout(() => {
                         Swal.fire({
                             title: 'Peringatan!',
-                            text: 'DATA ASN TIDAK DITEMUKAN SILAHKAN MELAPORKAN KE ADMIN CABDIS (MOCHD GHAZALI/JEDDAH/GAZA)',
+                            text: 'DATA ASN TIDAK DITEMUKAN SILAHKAN MELAPORKAN KE ADMIN CABDIS (MOCHD GHAZALI/GAZA)',
                             icon: 'warning',
                             confirmButtonText: 'Oke',
                             confirmButtonColor: '#2563EB',
@@ -577,10 +579,12 @@ if st.session_state.role == "Admin":
                 </script>
                 """
                 st.html(html_swal_nip)
-                st.error("⚠️ DATA ASN TIDAK DITEMUKAN SILAHKAN MELAPORKAN KE ADMIN CABDIS (MOCHD GHAZALI/JEDDAH/GAZA)")
+                st.error("⚠️ DATA ASN TIDAK DITEMUKAN SILAHKAN MELAPORKAN KE ADMIN CABDIS (MOCHD GHAZALI/GAZA)")
             else:
                 emp = df_peg_found.iloc[0]
-                nip_peg, nama_peg = str(emp['nip']), emp['name']
+                raw_nip_db = str(emp['nip'])
+                nip_peg = raw_nip_db.strip()
+                nama_peg = emp['name']
                 is_cadar = str(emp.get('is_cadar', 'False')).lower() == 'true'
                 is_uploaded = str(emp.get('photo_uploaded', False)).lower() == 'true'
                 
@@ -612,7 +616,12 @@ if st.session_state.role == "Admin":
                                     file_bytes = kompres_foto(foto_file.getvalue(), quality=60, max_size=(600, 600))
                                     url_foto = upload_ke_supabase(file_bytes, f"foto_acuan/{nip_peg}.jpg", "image/jpeg")
                                     if url_foto:
-                                        supabase.table('pegawai').update({'photo_uploaded': True, 'photo_base64': url_foto}).eq('nip', nip_peg).execute()
+                                        url_foto_fresh = f"{url_foto.split('?')[0]}?t={int(time.time())}"
+                                        supabase.table('pegawai').update({
+                                            'nip': nip_peg,
+                                            'photo_uploaded': True, 
+                                            'photo_base64': url_foto_fresh
+                                        }).eq('nip', raw_nip_db).execute()
                                         st.success("✅ Foto acuan berhasil disimpan & otomatis terkunci!")
                                         time.sleep(1)
                                         st.rerun()
