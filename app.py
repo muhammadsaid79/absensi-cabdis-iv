@@ -1026,10 +1026,11 @@ elif st.session_state.role in ["Superadmin", "Admin Cuti"]:
                 
                 submit_manual = st.form_submit_button("💾 Simpan Pegawai")
                 if submit_manual:
-                    if manual_nip.strip() and manual_nama.strip() and manual_sekolah != "-":
+                    nip_manual_clean = "".join(c for c in manual_nip if c.isdigit())
+                    if nip_manual_clean and manual_nama.strip() and manual_sekolah != "-":
                         try:
                             supabase.table('pegawai').upsert({
-                                'nip': manual_nip.strip(),
+                                'nip': nip_manual_clean,
                                 'name': manual_nama.strip(),
                                 'school_name': manual_sekolah.strip(),
                                 'photo_uploaded': False,
@@ -1074,7 +1075,7 @@ elif st.session_state.role in ["Superadmin", "Admin Cuti"]:
                     
                     records = []
                     for _, r in df_upload.iterrows():
-                        nip_v = str(r['nip']).strip().replace(" ", "").replace("\t", "") if pd.notna(r.get('nip')) else ""
+                        nip_v = "".join(c for c in str(r['nip']) if c.isdigit()) if pd.notna(r.get('nip')) else ""
                         name_v = str(r['name']).strip() if pd.notna(r.get('name')) else ""
                         sch_v = str(r['school_name']).strip() if pd.notna(r.get('school_name')) else ""
                         
@@ -1113,16 +1114,19 @@ elif st.session_state.role in ["Superadmin", "Admin Cuti"]:
                 btn_cari_edit = st.form_submit_button("🔍 Cari Pegawai untuk Diedit")
                 
                 if btn_cari_edit:
-                    if cari_nip_edit.strip():
-                        st.session_state.edit_nip_target = cari_nip_edit.strip()
+                    nip_bersih = "".join(c for c in cari_nip_edit if c.isdigit())
+                    if nip_bersih:
+                        st.session_state.edit_nip_target = nip_bersih
                     else:
                         st.session_state.edit_nip_target = None
                         st.warning("Silakan masukkan NIP terlebih dahulu.")
             if st.session_state.get('edit_nip_target'):
-                target_nip = st.session_state.edit_nip_target
+                target_nip = "".join(c for c in str(st.session_state.edit_nip_target) if c.isdigit())
                 try:
-                    res_edit = supabase.table('pegawai').select('nip, name, school_name, photo_uploaded, is_cadar').ilike('nip', f"%{target_nip}%").execute()
+                    res_edit = supabase.table('pegawai').select('nip, name, school_name, photo_uploaded, is_cadar').ilike('nip', f"%{target_nip[:8]}%").execute()
                     df_edit = pd.DataFrame(res_edit.data) if res_edit.data else pd.DataFrame()
+                    if not df_edit.empty:
+                        df_edit = df_edit[df_edit['nip'].astype(str).apply(lambda x: "".join(c for c in x if c.isdigit())) == target_nip]
                 except Exception as e:
                     df_edit = pd.DataFrame()
                     st.error(f"Gagal mengambil data: {e}")
@@ -1131,6 +1135,7 @@ elif st.session_state.role in ["Superadmin", "Admin Cuti"]:
                     st.warning(f"⚠️ Pegawai dengan NIP {target_nip} tidak ditemukan.")
                 else:
                     emp_edit = df_edit.iloc[0]
+                    actual_nip_db = str(emp_edit['nip'])
                     current_photo_uploaded = str(emp_edit.get('photo_uploaded', 'False')).lower() == 'true'
 
                     st.info(f"📌 Mengedit data untuk NIP: **{target_nip}** | Nama: **{emp_edit.get('name', '')}**")
@@ -1151,10 +1156,9 @@ elif st.session_state.role in ["Superadmin", "Admin Cuti"]:
 
                     if st.session_state.get('show_photo_nip') == target_nip:
                         try:
-                            res_photo = supabase.table('pegawai').select('photo_base64').eq('nip', target_nip).execute()
+                            res_photo = supabase.table('pegawai').select('photo_base64').eq('nip', actual_nip_db).execute()
                             if res_photo.data and res_photo.data[0].get('photo_base64'):
                                 photo_url_or_base64 = res_photo.data[0]['photo_base64']
-                                # Bersihkan query tanda tanya lama dan berikan timestamp segar
                                 clean_url = photo_url_or_base64.split('?')[0]
                                 fresh_url = f"{clean_url}?t={int(time.time())}"
                                 st.image(fresh_url, caption=f"Foto Acuan: {emp_edit.get('name', '')}", width=250)
@@ -1176,12 +1180,11 @@ elif st.session_state.role in ["Superadmin", "Admin Cuti"]:
                                         url_foto = upload_ke_supabase(file_bytes, f"foto_acuan/{target_nip}.jpg", "image/jpeg")
                                         if url_foto:
                                             url_foto = f"{url_foto}?t={int(time.time())}"
-                                            supabase.table('pegawai').update({'photo_uploaded': True, 'photo_base64': url_foto}).eq('nip', target_nip).execute()
+                                            supabase.table('pegawai').update({'nip': target_nip, 'photo_uploaded': True, 'photo_base64': url_foto}).eq('nip', actual_nip_db).execute()
                                             st.success("✅ Foto acuan berhasil diperbarui dan dikunci secara langsung oleh Superadmin!")
                                             st.session_state[f'show_ganti_{target_nip}'] = False
                                             time.sleep(1)
                                             st.rerun()
-                    actual_nip_db = str(emp_edit['nip'])
                     with st.form("form_update_pegawai"):
                         edit_nip = st.text_input("NIP Pegawai:", value=str(emp_edit.get('nip', target_nip)).strip())
                         edit_nama = st.text_input("Nama Pegawai:", value=emp_edit.get('name', ''))
