@@ -238,16 +238,15 @@ def get_data_admin():
 @st.cache_data(ttl=86400)
 def get_data_pengaturan():
     try:
-        # Tambahkan query gps_aktif
-        res = supabase.table('pengaturan').select('batas_masuk, batas_pulang, gps_aktif').execute()
+        res = supabase.table('pengaturan').select('batas_masuk, batas_pulang, gps_aktif, foto_aktif').execute()
         if res.data and len(res.data) > 0:
             return pd.DataFrame(res.data)
         else:
-            default_data = {'batas_masuk': '07:30', 'batas_pulang': '16:00', 'gps_aktif': True}
+            default_data = {'batas_masuk': '07:30', 'batas_pulang': '16:00', 'gps_aktif': True, 'foto_aktif': False}
             supabase.table('pengaturan').insert(default_data).execute()
             return pd.DataFrame([default_data])
     except:
-        return pd.DataFrame([{'batas_masuk': '07:30', 'batas_pulang': '16:00', 'gps_aktif': True}])
+        return pd.DataFrame([{'batas_masuk': '07:30', 'batas_pulang': '16:00', 'gps_aktif': True, 'foto_aktif': False}])
 
 def parse_jam_str(jam_val):
     if not jam_val or str(jam_val).strip() in ['-', 'None', 'nan', '']:
@@ -1718,6 +1717,46 @@ elif st.session_state.role in ["Superadmin", "Admin Cuti"]:
                 except Exception as e:
                     st.error(f"Gagal menghapus data: {e}")
 
+        st.markdown("---")
+        st.markdown("#### 🧹 Bersihkan Foto Bukti Sidak (Kosongkan Storage)")
+        st.caption("Hapus seluruh foto bukti sidak di folder 'bukti_absen' Supabase Storage setelah selesai direkap agar jatah ruang simpan 1 GB tetap kosong.")
+
+        konfirmasi_hapus_foto = st.text_input("Ketik 'HAPUS FOTO' (huruf kapital) untuk mengosongkan foto bukti sidak:", key="konf_hapus_foto_sidak")
+
+        if st.button("🧹 Kosongkan Semua Foto Bukti Sidak", type="primary", key="btn_bersihkan_foto_sidak"):
+            if konfirmasi_hapus_foto != "HAPUS FOTO":
+                st.error("❌ Anda harus mengetik 'HAPUS FOTO' pada kolom konfirmasi.")
+            else:
+                try:
+                    folders = supabase.storage.from_("foto_pegawai").list("bukti_absen")
+                    paths_to_delete = []
+                    for item in (folders or []):
+                        fname = item.get("name")
+                        if not fname:
+                            continue
+                        if item.get("id") is None:
+                            subfiles = supabase.storage.from_("foto_pegawai").list(f"bukti_absen/{fname}")
+                            for sf in (subfiles or []):
+                                if sf.get("name"):
+                                    paths_to_delete.append(f"bukti_absen/{fname}/{sf['name']}")
+                        else:
+                            paths_to_delete.append(f"bukti_absen/{fname}")
+
+                    if paths_to_delete:
+                        for i in range(0, len(paths_to_delete), 100):
+                            supabase.storage.from_("foto_pegawai").remove(paths_to_delete[i:i+100])
+
+                    try:
+                        supabase.table('absensi').update({'foto_bukti': None}).not_.is_('foto_bukti', 'null').execute()
+                    except Exception:
+                        pass
+
+                    st.success(f"✅ Berhasil menghapus {len(paths_to_delete)} file foto bukti sidak! Ruang Storage kembali lega.")
+                    time.sleep(1.5)
+                    st.rerun()
+                except Exception as e:
+                    st.error(f"Gagal membersihkan foto bukti sidak: {e}")
+
     # ------------------------------------------
     # 9. MENU JAM & GPS (TERKUNCI)
     # ------------------------------------------
@@ -1725,7 +1764,7 @@ elif st.session_state.role in ["Superadmin", "Admin Cuti"]:
         if not st.session_state['menu_unlocked']:
             tampilkan_form_kunci("Jam & GPS")
         else:
-            st.markdown("### ⚙ Pengaturan Waktu & GPS")
+            st.markdown("### ⚙ Pengaturan Waktu, GPS & Sidak Foto")
             df_settings = get_data_pengaturan()
             b_in = df_settings['batas_masuk'].iloc[0] if not df_settings.empty else '07:30'
             b_out = df_settings['batas_pulang'].iloc[0] if not df_settings.empty else '16:00'
@@ -1735,6 +1774,11 @@ elif st.session_state.role in ["Superadmin", "Admin Cuti"]:
             else:
                 gps_state = True
 
+            if 'foto_aktif' in df_settings.columns and not pd.isna(df_settings['foto_aktif'].iloc[0]):
+                foto_state = bool(df_settings['foto_aktif'].iloc[0])
+            else:
+                foto_state = False
+
             n_in = st.time_input("Batas Masuk", datetime.datetime.strptime(b_in, '%H:%M').time())
             n_out = st.time_input("Batas Pulang", datetime.datetime.strptime(b_out, '%H:%M').time())
             
@@ -1742,15 +1786,28 @@ elif st.session_state.role in ["Superadmin", "Admin Cuti"]:
             st.markdown("#### 📍 Pengaturan Fitur Jarak GPS")
             n_gps = st.checkbox("✅ Aktifkan Validasi Jarak/Radius GPS", value=gps_state, help="Hapus centang (OFF) jika ingin mengabaikan masalah PC yang titik GPS-nya sering meleset. Kunci PC & Wajah akan tetap wajib/jalan.")
 
+            st.markdown("---")
+            st.markdown("#### 📸 Sakelar Mode Sidak Foto Bukti")
+            n_foto = st.toggle(
+                "Sakelar Rekam Foto Bukti Sidak (ON / OFF)",
+                value=foto_state,
+                help="Geser ke ON saat hari sidak agar seluruh PC mengirim foto bukti ±6 KB bernama NIP. Geser ke OFF setelah sidak selesai."
+            )
+            if n_foto:
+                st.success("🟢 **STATUS SAKELAR: ON** — Seluruh PC sekolah akan mengirim foto bukti sidak (±6 KB).")
+            else:
+                st.info("⚪ **STATUS SAKELAR: OFF** — Mode normal (0 foto dikirim, kuota storage tetap 0 MB).")
+
             if st.button("💾 Simpan Pengaturan", type="primary"):
                 try:
                     supabase.table('pengaturan').update({
                         'batas_masuk': n_in.strftime('%H:%M'), 
                         'batas_pulang': n_out.strftime('%H:%M'),
-                        'gps_aktif': n_gps
+                        'gps_aktif': n_gps,
+                        'foto_aktif': n_foto
                     }).neq('batas_masuk', '').execute()
                     st.cache_data.clear()
-                    st.success("✅ Pengaturan Jam & GPS berhasil diperbarui!")
+                    st.success("✅ Pengaturan Jam, GPS & Sidak Foto berhasil diperbarui!")
                     time.sleep(1)
                     st.rerun()
                 except Exception as e:
