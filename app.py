@@ -75,7 +75,8 @@ def tampilkan_peringatan_csv():
 # --- 1.5. FUNGSI KRIPTOGRAFI KEAMANAN ---
 SECRET_KEY = os.environ.get("COOKIE_SECRET") or st.secrets.get("COOKIE_SECRET")
 SUPERADMIN_PASSWORD = os.environ.get("SUPERADMIN_PASSWORD") or st.secrets.get("SUPERADMIN_PASSWORD")
-SUPERADMIN_MENU_PASSWORD = os.environ.get("SUPERADMIN_MENU_PASSWORD") or st.secrets.get("SUPERADMIN_MENU_PASSWORD", "SandiMenu2026!")
+SUPERADMIN_MENU_PASSWORD = os.environ.get("SUPERADMIN_MENU_PASSWORD") or st.secrets.get("SUPERADMIN_MENU_PASSWORD")
+SUPERADMIN_KHUSUS_PASSWORD = os.environ.get("SUPERADMIN_KHUSUS_PASSWORD") or st.secrets.get("SUPERADMIN_KHUSUS_PASSWORD")
 
 if not SECRET_KEY or not SUPERADMIN_PASSWORD:
     st.error("🔒 KUNCI RAHASIA TIDAK DITEMUKAN! Pastikan COOKIE_SECRET dan SUPERADMIN_PASSWORD terisi.")
@@ -419,6 +420,7 @@ def logout():
     st.session_state.logout_triggered = True 
     st.session_state.wajah_terverifikasi = False 
     st.session_state.menu_unlocked = False
+    st.session_state.menu_khusus_unlocked = False
     st.session_state.admin_dashboard_unlocked = False
     st.session_state.edit_nip_target = None
     st.session_state.show_photo_nip = None
@@ -724,9 +726,10 @@ elif st.session_state.role in ["Superadmin", "Admin Cuti"]:
     col_judul.title(f"🛠️ {menu_superadmin}") # Judul dinamis mengikuti menu kiri
     col_tombol.button("🚪 Logout", on_click=logout, width="stretch", key="btn_logout_superadmin")
 
-    if st.session_state.get('menu_unlocked', False):
+    if st.session_state.get('menu_unlocked', False) or st.session_state.get('menu_khusus_unlocked', False):
         if st.button("🔒 Kunci Kembali Layar Menu Admin", key="btn_lock_menu_again"):
             st.session_state['menu_unlocked'] = False
+            st.session_state['menu_khusus_unlocked'] = False
             st.rerun()
 
     def tampilkan_form_kunci(nama_tab):
@@ -740,6 +743,18 @@ elif st.session_state.role in ["Superadmin", "Admin Cuti"]:
                 st.rerun()
             else:
                 st.error("❌ Sandi menu salah!")
+
+    def tampilkan_form_kunci_khusus(nama_tab):
+        st.warning(f"🔒 Menu **{nama_tab}** dikunci dengan sandi keamanan khusus.")
+        pw_input = st.text_input("Masukkan Sandi Khusus:", type="password", key=f"pw_lock_khusus_{nama_tab}")
+        if st.button("🔓 Buka Akses Menu", key=f"btn_lock_khusus_{nama_tab}", type="primary"):
+            if SUPERADMIN_KHUSUS_PASSWORD and pw_input == SUPERADMIN_KHUSUS_PASSWORD:
+                st.session_state['menu_khusus_unlocked'] = True
+                st.success("✅ Akses menu khusus berhasil dibuka!")
+                time.sleep(0.5)
+                st.rerun()
+            else:
+                st.error("❌ Sandi khusus salah!")
 
     st.write("") # Memberi jarak putih ekstra agar UI bernafas (elegan)
 
@@ -1236,11 +1251,11 @@ elif st.session_state.role in ["Superadmin", "Admin Cuti"]:
                                 st.error(f"Gagal memperbarui data: {e}")
 
     # ------------------------------------------
-    # 6. MENU AKUN ADMIN (TERKUNCI)
+    # 6. MENU AKUN ADMIN (TERKUNCI KHUSUS)
     # ------------------------------------------
     elif menu_superadmin == "🔑 Akun Admin":
-        if not st.session_state['menu_unlocked']:
-            tampilkan_form_kunci("Admin")
+        if not st.session_state['menu_khusus_unlocked']:
+            tampilkan_form_kunci_khusus("Akun Admin")
         else:
             st.markdown("### ➕ Tambah Admin Baru")
             with st.form("form_tambah_admin"):
@@ -1301,11 +1316,13 @@ elif st.session_state.role in ["Superadmin", "Admin Cuti"]:
                         st.rerun()
 
     # ------------------------------------------
-    # 7. MENU IZIN & MANUAL
+    # 7. MENU IZIN & MANUAL (TERKUNCI KHUSUS)
     # ------------------------------------------
     elif menu_superadmin == "📝 Izin & Manual":
+        if st.session_state.role == "Superadmin" and not st.session_state['menu_khusus_unlocked']:
+            tampilkan_form_kunci_khusus("Izin & Manual")
+            st.stop()
         st.markdown("### 📝 Input Izin / Cuti / Sakit / Dinas Luar")
-        st.caption("Cari NIP Pegawai dan lengkapi formulir izin.")
 
         with st.form("form_cari_nip_izin"):
             nip_input_izin = st.text_input("Masukkan NIP Pegawai:", placeholder="Ketik NIP lalu tekan enter atau cari")
