@@ -515,7 +515,7 @@ elif st.session_state.role == "Admin Cuti":
     st.sidebar.markdown("### 🎛️ Menu Navigasi")
     menu_superadmin = st.sidebar.radio(
         "Pilih Halaman:",
-        ["📝 Izin & Manual"],
+        ["📋 Absensi Massal"],
         label_visibility="collapsed"
     )
     st.sidebar.write("---")
@@ -1260,7 +1260,7 @@ elif st.session_state.role in ["Superadmin", "Admin Cuti"]:
         else:
             st.markdown("### ➕ Tambah Admin Baru")
             with st.form("form_tambah_admin"):
-                jenis_admin = st.radio("Pilih Jenis Akun:", ["Admin Sekolah", "Admin Cuti (Hanya Akses Izin & Manual)"], horizontal=True)
+                jenis_admin = st.radio("Pilih Jenis Akun:", ["Admin Sekolah", "Admin Khusus (Hanya Akses Absensi Massal)"], horizontal=True)
                 new_user = st.text_input("Username Baru")
                 new_pass = st.text_input("Password", type="password")
                 
@@ -1270,7 +1270,7 @@ elif st.session_state.role in ["Superadmin", "Admin Cuti"]:
                     new_sekolah = st.selectbox("Akses Sekolah", opsi_sekolah_admin)
                 else:
                     new_sekolah = "AKUN_KHUSUS_CUTI"
-                    st.info("Akun ini hanya akan bisa mengakses menu Izin & Manual.")
+                    st.info("Akun ini hanya akan bisa mengakses menu Absensi Massal.")
                 
                 if st.form_submit_button("Simpan Admin"):
                     if new_user and new_pass:
