@@ -385,6 +385,7 @@ for key_state, val in {
     'last_checked_nip_dash': None,
     'last_searched_school_pc': None,
     'menu_unlocked': False,
+    'menu_khusus_unlocked': False,
     'admin_dashboard_unlocked': False,
     'edit_nip_target': None,
     'show_photo_nip': None,
@@ -1254,7 +1255,7 @@ elif st.session_state.role in ["Superadmin", "Admin Cuti"]:
     # 6. MENU AKUN ADMIN (TERKUNCI KHUSUS)
     # ------------------------------------------
     elif menu_superadmin == "🔑 Akun Admin":
-        if not st.session_state['menu_khusus_unlocked']:
+        if not st.session_state.get('menu_khusus_unlocked', False):
             tampilkan_form_kunci_khusus("Akun Admin")
         else:
             st.markdown("### ➕ Tambah Admin Baru")
@@ -1319,7 +1320,7 @@ elif st.session_state.role in ["Superadmin", "Admin Cuti"]:
     # 7. MENU IZIN & MANUAL (TERKUNCI KHUSUS)
     # ------------------------------------------
     elif menu_superadmin == "📝 Izin & Manual":
-        if st.session_state.role == "Superadmin" and not st.session_state['menu_khusus_unlocked']:
+        if st.session_state.role == "Superadmin" and not st.session_state.get('menu_khusus_unlocked', False):
             tampilkan_form_kunci_khusus("Izin & Manual")
             st.stop()
         st.markdown("### 📝 Input Izin / Cuti / Sakit / Dinas Luar")
