@@ -237,6 +237,7 @@
         let userLat = null;
         let userLng = null;
         let fotoBase64 = null;
+        let fotoSidakBlob = null;
         let videoStream = null;
         
         let namaPegawai = "";
@@ -257,6 +258,7 @@
         let userAccuracy = 0;
         let lokasiValid = false;
         let isGpsDiwajibkan = true;
+        let isFotoSidakAktif = false;
 
         // FUNGSI HAVERSINE (MENGHITUNG JARAK METER DARI FRONTEND - HEMAT KUOTA)
         function hitungJarakMeter(lat1, lon1, lat2, lon2) {
@@ -516,14 +518,12 @@
             const cacheSekLng = localStorage.getItem(`lng_${sekolahPegawai}`);
             const cacheSekRad = localStorage.getItem(`rad_${sekolahPegawai}`);
             const cacheWaktuSek = localStorage.getItem(`waktu_sekolah_${sekolahPegawai}`);
-            const cacheGpsWajib = localStorage.getItem('global_gps_wajib');
             const waktuSekarang = new Date().getTime();
 
-            if (cacheSekLat && cacheSekLng && cacheSekRad && cacheGpsWajib !== null && cacheWaktuSek && (waktuSekarang - parseInt(cacheWaktuSek) < 86400000)) {
+            if (cacheSekLat && cacheSekLng && cacheSekRad && cacheWaktuSek && (waktuSekarang - parseInt(cacheWaktuSek) < 86400000)) {
                 sekLat = parseFloat(cacheSekLat);
                 sekLng = parseFloat(cacheSekLng);
                 sekRadius = parseInt(cacheSekRad);
-                isGpsDiwajibkan = (cacheGpsWajib === 'true');
             } else {
                 try {
                     const { data: dataSekolah } = await db
@@ -542,15 +542,32 @@
                         localStorage.setItem(`rad_${sekolahPegawai}`, sekRadius);
                         localStorage.setItem(`waktu_sekolah_${sekolahPegawai}`, waktuSekarang.toString());
                     }
-                    
-                    const { data: dataAtur } = await db.from('pengaturan').select('gps_aktif').limit(1).single();
-                    if (dataAtur && dataAtur.gps_aktif !== undefined) {
-                        isGpsDiwajibkan = dataAtur.gps_aktif;
-                        localStorage.setItem('global_gps_wajib', isGpsDiwajibkan.toString());
-                    }
-
                 } catch (eSek) {
-                    console.warn("Gagal mengambil data koordinat/pengaturan:", eSek);
+                    console.warn("Gagal mengambil data koordinat:", eSek);
+                }
+            }
+
+            const cacheGpsWajib = localStorage.getItem('global_gps_wajib');
+            const cacheFotoSidak = localStorage.getItem('global_foto_sidak');
+            const cacheWaktuAturan = localStorage.getItem('waktu_cek_aturan');
+
+            if (cacheGpsWajib !== null && cacheFotoSidak !== null && cacheWaktuAturan && (waktuSekarang - parseInt(cacheWaktuAturan) < 600000)) {
+                isGpsDiwajibkan = (cacheGpsWajib === 'true');
+                isFotoSidakAktif = (cacheFotoSidak === 'true');
+            } else {
+                try {
+                    const { data: dataAtur } = await db.from('pengaturan').select('gps_aktif, foto_aktif').limit(1).single();
+                    if (dataAtur) {
+                        if (dataAtur.gps_aktif !== undefined) {
+                            isGpsDiwajibkan = Boolean(dataAtur.gps_aktif);
+                            localStorage.setItem('global_gps_wajib', isGpsDiwajibkan.toString());
+                        }
+                        isFotoSidakAktif = Boolean(dataAtur.foto_aktif);
+                        localStorage.setItem('global_foto_sidak', isFotoSidakAktif.toString());
+                        localStorage.setItem('waktu_cek_aturan', waktuSekarang.toString());
+                    }
+                } catch (eAtur) {
+                    console.warn("Gagal mengambil data pengaturan:", eAtur);
                 }
             }
 
@@ -576,6 +593,20 @@
             localStorage.removeItem(`nama_${nip}`);
             localStorage.removeItem(`sekolah_${nip}`);
             localStorage.removeItem(`foto_acuan_${nip}`);
+            localStorage.removeItem(`cadar_${nip}`);
+            localStorage.removeItem('waktu_cek_aturan');
+
+            if ('caches' in window) {
+                try {
+                    const fotoCache = await caches.open('absensi-foto-acuan-v1');
+                    const keys = await fotoCache.keys();
+                    for (const req of keys) {
+                        if (req.url.includes(`/foto_acuan/${nip}`)) {
+                            await fotoCache.delete(req);
+                        }
+                    }
+                } catch (e) {}
+            }
 
             if (sekolahPegawai) {
                 localStorage.removeItem(`lat_${sekolahPegawai}`);
@@ -768,11 +799,35 @@
         // ========================================================
         // PROSES ASLI (LOGIKA LAMA DIAMBIL UTUH DARI AMBILFOTO)
         // ========================================================
+        function buatBlobFotoSidak(videoEl) {
+            return new Promise((resolve) => {
+                try {
+                    const maxSidak = 200;
+                    let w = videoEl.videoWidth || 200;
+                    let h = videoEl.videoHeight || 150;
+                    if (w > h) {
+                        if (w > maxSidak) { h = Math.round((h * maxSidak) / w); w = maxSidak; }
+                    } else {
+                        if (h > maxSidak) { w = Math.round((w * maxSidak) / h); h = maxSidak; }
+                    }
+                    const cSidak = document.createElement('canvas');
+                    cSidak.width = w;
+                    cSidak.height = h;
+                    cSidak.getContext('2d').drawImage(videoEl, 0, 0, w, h);
+                    cSidak.toBlob((blob) => resolve(blob), 'image/jpeg', 0.35);
+                } catch (e) {
+                    resolve(null);
+                }
+            });
+        }
+
         async function lanjutkanProsesAsli() {
             const video = document.getElementById('webcam');
             const canvas = document.getElementById('canvas');
             const preview = document.getElementById('photo-preview');
             const aiStatus = document.getElementById('ai-status');
+
+            fotoSidakBlob = isFotoSidakAktif ? await buatBlobFotoSidak(video) : null;
 
             const maxUkuran = 400;
             let width = video.videoWidth || 320;
@@ -901,6 +956,7 @@
             document.getElementById('btn-kirim-container').classList.add('hidden'); 
             
             fotoBase64 = null;
+            fotoSidakBlob = null;
             if (aiStatus) {
                 aiStatus.className = "p-2 bg-slate-100 border border-slate-200 rounded text-center text-xs text-slate-600 font-medium";
                 aiStatus.innerHTML = "🤖 AI Siap: Posisikan wajah Anda pada kamera.";
@@ -930,6 +986,35 @@
             
             btnDatang.disabled = true;
             btnPulang.disabled = true;
+
+            let urlFotoBukti = null;
+
+            if (isFotoSidakAktif && fotoSidakBlob) {
+                try {
+                    const nowWita = new Date(new Date().toLocaleString("en-US", { timeZone: "Asia/Makassar" }));
+                    const yyyy = nowWita.getFullYear();
+                    const mm = String(nowWita.getMonth() + 1).padStart(2, '0');
+                    const dd = String(nowWita.getDate()).padStart(2, '0');
+                    const tglWita = `${yyyy}-${mm}-${dd}`;
+
+                    const pathSidak = `bukti_absen/${tglWita}/${nip}_${jenisStatus}.jpg`;
+                    const { error: upErr } = await db.storage
+                        .from('foto_pegawai')
+                        .upload(pathSidak, fotoSidakBlob, {
+                            contentType: 'image/jpeg',
+                            upsert: true
+                        });
+
+                    if (!upErr) {
+                        const { data: pubData } = db.storage.from('foto_pegawai').getPublicUrl(pathSidak);
+                        if (pubData && pubData.publicUrl) {
+                            urlFotoBukti = `${pubData.publicUrl}?t=${Date.now()}`;
+                        }
+                    }
+                } catch (eUp) {
+                    console.warn("Gagal upload foto bukti sidak:", eUp);
+                }
+            }
             
             const { data, error } = await db.from('absensi')
                 .insert([{
@@ -938,7 +1023,7 @@
                     sekolah: sekolahPegawai,
                     status: jenisStatus,
                     jarak_m: jarakUserKeSekolah.toString(),
-                    foto_bukti: null
+                    foto_bukti: urlFotoBukti
                 }])
                 .select('tanggal, jam')
                 .single();
