@@ -1416,11 +1416,13 @@ elif st.session_state.role in ["Superadmin", "Admin Cuti"]:
                             except Exception as e:
                                 st.error(f"Gagal memproses pengajuan izin: {e}")
 
-        if st.session_state.role == "Superadmin":
-            st.markdown("---")
-            
-            st.markdown("### ✍️ Input Absen Manual (Masuk/Pulang)")
-            st.caption("Input absen manual ke database. ASN yang diinput di sini tidak perlu absen lagi di sekolah.")
+        if st.session_state.role != "Superadmin":
+            st.stop()
+
+        st.markdown("---")
+        
+        st.markdown("### ✍️ Input Absen Manual (Masuk/Pulang)")
+        st.caption("Input absen manual ke database. ASN yang diinput di sini tidak perlu absen lagi di sekolah.")
 
         with st.form("form_cari_nip_manual"):
             nip_input_manual = st.text_input("Masukkan NIP Pegawai (Untuk Absen Manual):", placeholder="Ketik NIP lalu cari", key="nip_manual_search")
