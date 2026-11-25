@@ -514,7 +514,7 @@ elif st.session_state.role == "Admin Cuti":
     st.sidebar.markdown("### 🎛️ Menu Navigasi")
     menu_superadmin = st.sidebar.radio(
         "Pilih Halaman:",
-        ["📋 Absensi Massal"],
+        ["📝 Izin & Manual", "📋 Absensi Massal"],
         label_visibility="collapsed"
     )
     st.sidebar.write("---")
