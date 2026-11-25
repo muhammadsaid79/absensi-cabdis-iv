@@ -92,6 +92,9 @@
             <button onclick="cekPegawai()" id="btn-cari" class="w-full bg-blue-600 text-white font-bold py-2.5 px-4 rounded-lg hover:bg-blue-700 transition text-sm">
                 Cari Data Pegawai
             </button>
+            <button onclick="sinkronPegawaiAwal()" id="btn-sinkron-awal" class="w-full mt-2 bg-amber-500 hover:bg-amber-600 text-white font-semibold py-2 px-4 rounded-lg transition text-xs flex items-center justify-center gap-1">
+                🔄 Sinkronkan Data / Foto Baru (Jika Foto Baru Diupload Admin)
+            </button>
         </div>
 
         <!-- BAGIAN 2: AREA ABSENSI -->
@@ -616,6 +619,33 @@
             }
 
             alert("SILAHKAN MENUNGGU! Sistem sedang mengambil data & foto profil terbaru Bapak/Ibu.");
+            await cekPegawai();
+        }
+
+        async function sinkronPegawaiAwal() {
+            const nip = document.getElementById('nip-input').value.trim();
+            if (!nip) {
+                alert("⚠️ Silakan ketik NIP Bapak/Ibu terlebih dahulu di kotak atas, lalu klik tombol Sinkronkan!");
+                return;
+            }
+
+            localStorage.removeItem(`nama_${nip}`);
+            localStorage.removeItem(`sekolah_${nip}`);
+            localStorage.removeItem(`foto_acuan_${nip}`);
+            localStorage.removeItem(`cadar_${nip}`);
+
+            if ('caches' in window) {
+                try {
+                    const fotoCache = await caches.open('absensi-foto-acuan-v1');
+                    const keys = await fotoCache.keys();
+                    for (const req of keys) {
+                        if (req.url.includes(`/foto_acuan/${nip}`)) {
+                            await fotoCache.delete(req);
+                        }
+                    }
+                } catch (e) {}
+            }
+
             await cekPegawai();
         }
 
